@@ -1,0 +1,22 @@
+flowchart TB
+    subgraph Client ["Client Device"]
+        Browser["Web Browser (React App)"]
+        Mobile["Mobile Device (Android App)"]
+    end
+    
+    subgraph Server ["Application Server"]
+        backend["FastAPI Server"]
+    end
+    
+    subgraph DB ["Database Server"]
+        database[("PostgreSQL (Supabase)")]
+    end
+    
+    subgraph External ["AI Cloud"]
+        ai["Google Gemini API"]
+    end
+    
+    Browser -- "HTTPS/WSS" --> backend
+    Mobile -- "HTTPS/WSS" --> backend
+    backend -- "TCP/IP" --> database
+    backend -- "HTTPS" --> ai

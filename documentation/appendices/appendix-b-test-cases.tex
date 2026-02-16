@@ -1,0 +1,284 @@
+% ============================================================
+% Appendix B: Test Cases
+% ============================================================
+
+\chapter{Test Cases}
+
+This appendix provides detailed test cases used for validating the Personal Finance Manager system.
+
+\section{Unit Test Cases}
+
+\subsection{NLP Parsing Test Suite}
+
+\begin{longtable}{|p{0.5cm}|p{4cm}|p{4cm}|p{4cm}|}
+\caption{Complete NLP Parsing Test Cases} \label{tab:nlp-tests-complete} \\
+\hline
+\textbf{ID} & \textbf{Input} & \textbf{Expected Output} & \textbf{Result} \\
+\hline
+\endfirsthead
+\hline
+\textbf{ID} & \textbf{Input} & \textbf{Expected Output} & \textbf{Result} \\
+\hline
+\endhead
+
+\multicolumn{4}{c}{\textbf{Basic Expense Formats}} \\
+\hline
+1 & momo 100 & item: momo, amount: 100, category: Food & Pass \\
+\hline
+2 & taxi 500 & item: taxi, amount: 500, category: Transport & Pass \\
+\hline
+3 & coffee 50 & item: coffee, amount: 50, category: Food & Pass \\
+\hline
+4 & petrol 2000 & item: petrol, amount: 2000, category: Transport & Pass \\
+\hline
+5 & medicine 350 & item: medicine, amount: 350, category: Healthcare & Pass \\
+\hline
+
+\multicolumn{4}{c}{\textbf{Expense with Person}} \\
+\hline
+6 & biryani rahul 500 & item: biryani, amount: 500, paid\_by: rahul & Pass \\
+\hline
+7 & lunch amit 300 & item: lunch, amount: 300, paid\_by: amit & Pass \\
+\hline
+8 & dinner priya 800 & item: dinner, amount: 800, paid\_by: priya & Pass \\
+\hline
+
+\multicolumn{4}{c}{\textbf{Paid Format}} \\
+\hline
+9 & paid 500 to rahul & amount: 500, paid\_by: rahul & Pass \\
+\hline
+10 & paid for lunch 500 & item: lunch, amount: 500 & Pass \\
+\hline
+11 & paid electricity bill 1500 & item: electricity bill, amount: 1500 & Pass \\
+\hline
+
+\multicolumn{4}{c}{\textbf{Loan Transactions}} \\
+\hline
+12 & lent 5000 to amit & amount: 5000, type: loan\_given, person: amit & Pass \\
+\hline
+13 & borrowed 10000 from bank & amount: 10000, type: loan\_taken & Pass \\
+\hline
+14 & gave loan to ram 2000 & amount: 2000, type: loan\_given, person: ram & Pass \\
+\hline
+15 & took loan from bank 50000 & amount: 50000, type: loan\_taken & Pass \\
+\hline
+
+\multicolumn{4}{c}{\textbf{Loan Repayments}} \\
+\hline
+16 & paid loan to hari 400 & amount: 400, type: loan\_repayment & Pass \\
+\hline
+17 & ram returned 500 & amount: 500, type: loan\_received\_back & Pass \\
+\hline
+18 & repaid 1000 to shyam & amount: 1000, type: loan\_repayment & Pass \\
+\hline
+
+\multicolumn{4}{c}{\textbf{Income Transactions}} \\
+\hline
+19 & received salary 50000 & amount: 50000, type: income, category: Salary & Pass \\
+\hline
+20 & got freelance payment 10000 & amount: 10000, type: income & Pass \\
+\hline
+21 & income from rent 15000 & amount: 15000, type: income, category: Rent & Pass \\
+\hline
+
+\multicolumn{4}{c}{\textbf{Currency Formats}} \\
+\hline
+22 & 1 lakh rent & item: rent, amount: 100000 & Pass \\
+\hline
+23 & 2.5 lakh salary & item: salary, amount: 250000 & Pass \\
+\hline
+24 & 5k shopping & item: shopping, amount: 5000 & Pass \\
+\hline
+25 & 1 crore property & item: property, amount: 10000000 & Pass \\
+\hline
+
+\multicolumn{4}{c}{\textbf{Complex Inputs}} \\
+\hline
+26 & bought shirt for 1500 from mall & item: shirt, amount: 1500 & Pass \\
+\hline
+27 & spent 2000 on groceries & item: groceries, amount: 2000 & Pass \\
+\hline
+28 & movie tickets for family 800 & item: movie tickets, amount: 800 & Pass \\
+\hline
+
+\end{longtable}
+
+\section{Category Detection Test Cases}
+
+\begin{longtable}{|p{0.5cm}|p{4cm}|p{4cm}|p{3cm}|}
+\caption{Category Detection Test Cases} \label{tab:category-tests} \\
+\hline
+\textbf{ID} & \textbf{Item/Text} & \textbf{Expected Category} & \textbf{Result} \\
+\hline
+\endfirsthead
+\hline
+\textbf{ID} & \textbf{Item/Text} & \textbf{Expected Category} & \textbf{Result} \\
+\hline
+\endhead
+
+\multicolumn{4}{c}{\textbf{Food Category}} \\
+\hline
+1 & biryani & Food & Pass \\
+\hline
+2 & pizza delivery & Food & Pass \\
+\hline
+3 & coffee starbucks & Food & Pass \\
+\hline
+4 & lunch meeting & Food & Pass \\
+\hline
+
+\multicolumn{4}{c}{\textbf{Transport Category}} \\
+\hline
+5 & uber ride & Transport & Pass \\
+\hline
+6 & petrol station & Transport & Pass \\
+\hline
+7 & bus ticket & Transport & Pass \\
+\hline
+8 & metro card recharge & Transport & Pass \\
+\hline
+
+\multicolumn{4}{c}{\textbf{Utilities Category}} \\
+\hline
+9 & electricity bill & Utilities & Pass \\
+\hline
+10 & internet wifi & Utilities & Pass \\
+\hline
+11 & phone recharge & Utilities & Pass \\
+\hline
+12 & water bill & Utilities & Pass \\
+\hline
+
+\multicolumn{4}{c}{\textbf{Entertainment Category}} \\
+\hline
+13 & netflix subscription & Entertainment & Pass \\
+\hline
+14 & movie tickets & Entertainment & Pass \\
+\hline
+15 & spotify premium & Entertainment & Pass \\
+\hline
+16 & gaming purchase & Entertainment & Pass \\
+\hline
+
+\multicolumn{4}{c}{\textbf{Healthcare Category}} \\
+\hline
+17 & doctor consultation & Healthcare & Pass \\
+\hline
+18 & pharmacy medicine & Healthcare & Pass \\
+\hline
+19 & hospital bill & Healthcare & Pass \\
+\hline
+20 & lab test & Healthcare & Pass \\
+\hline
+
+\end{longtable}
+
+\section{System Integration Test Cases}
+
+\begin{longtable}{|p{0.5cm}|p{3.5cm}|p{4cm}|p{2.5cm}|p{2cm}|}
+\caption{System Integration Test Cases} \label{tab:integration-tests} \\
+\hline
+\textbf{ID} & \textbf{Test Scenario} & \textbf{Steps} & \textbf{Expected Result} & \textbf{Result} \\
+\hline
+\endfirsthead
+\hline
+\textbf{ID} & \textbf{Test Scenario} & \textbf{Steps} & \textbf{Expected Result} & \textbf{Result} \\
+\hline
+\endhead
+
+\multicolumn{5}{c}{\textbf{Authentication Tests}} \\
+\hline
+1 & User Registration & 1. Enter email/password\newline 2. Submit form\newline 3. Verify OTP & Account created, login successful & Pass \\
+\hline
+2 & User Login & 1. Enter credentials\newline 2. Submit form & Redirected to home & Pass \\
+\hline
+3 & Invalid Login & 1. Enter wrong password\newline 2. Submit form & Error message shown & Pass \\
+\hline
+
+\multicolumn{5}{c}{\textbf{Expense Management Tests}} \\
+\hline
+4 & Add Expense via Chat & 1. Type "momo 100"\newline 2. Confirm & Expense added to table & Pass \\
+\hline
+5 & Edit Expense & 1. Click edit icon\newline 2. Modify amount\newline 3. Save & Expense updated & Pass \\
+\hline
+6 & Delete Expense & 1. Click delete icon\newline 2. Confirm deletion & Expense removed & Pass \\
+\hline
+7 & Filter by Category & 1. Select category dropdown\newline 2. Choose "Food" & Only Food expenses shown & Pass \\
+\hline
+8 & Search Expenses & 1. Type in search box\newline 2. Enter "biryani" & Matching expenses shown & Pass \\
+\hline
+
+\multicolumn{5}{c}{\textbf{Group Management Tests}} \\
+\hline
+9 & Create Group & 1. Click "New Group"\newline 2. Enter name\newline 3. Save & New group created & Pass \\
+\hline
+10 & Switch Group & 1. Click group dropdown\newline 2. Select different group & Group-specific data shown & Pass \\
+\hline
+11 & Delete Group & 1. Click delete on group\newline 2. Confirm deletion & Group removed & Pass \\
+\hline
+
+\multicolumn{5}{c}{\textbf{Analytics Tests}} \\
+\hline
+12 & View Analytics & 1. Navigate to Analytics\newline 2. Wait for load & Charts displayed correctly & Pass \\
+\hline
+13 & Date Filter & 1. Select date range\newline 2. Apply filter & Data filtered by date & Pass \\
+\hline
+
+\multicolumn{5}{c}{\textbf{RAG Query Tests}} \\
+\hline
+14 & Category Query & 1. Type "How much on food?"\newline 2. Send & Correct total returned & Pass \\
+\hline
+15 & Time Query & 1. Type "Last week expenses"\newline 2. Send & Filtered results shown & Pass \\
+\hline
+16 & Item Query & 1. Type "Total spent on coffee"\newline 2. Send & Specific item total & Pass \\
+\hline
+
+\end{longtable}
+
+\section{Performance Test Results}
+
+\begin{table}[H]
+\centering
+\caption{Performance Benchmarks}
+\label{tab:performance-results}
+\begin{tabular}{|p{4cm}|p{3cm}|p{3cm}|p{3cm}|}
+\hline
+\textbf{Metric} & \textbf{Target} & \textbf{Actual} & \textbf{Status} \\
+\hline
+Parse Response Time (regex) & < 100ms & 45ms & Pass \\
+\hline
+Parse Response Time (AI) & < 2s & 0.8s & Pass \\
+\hline
+RAG Query Response & < 3s & 1.2s & Pass \\
+\hline
+Page Load Time & < 3s & 2.1s & Pass \\
+\hline
+Mobile Responsiveness & 100\% & 100\% & Pass \\
+\hline
+Concurrent Users & 100 & 150+ & Pass \\
+\hline
+\end{tabular}
+\end{table}
+
+\section{Browser Compatibility Test Results}
+
+\begin{table}[H]
+\centering
+\caption{Browser Compatibility}
+\label{tab:browser-compat}
+\begin{tabular}{|p{4cm}|p{3cm}|p{3cm}|p{3cm}|}
+\hline
+\textbf{Browser} & \textbf{Version} & \textbf{Platform} & \textbf{Status} \\
+\hline
+Google Chrome & 120+ & Desktop/Mobile & Pass \\
+\hline
+Mozilla Firefox & 120+ & Desktop & Pass \\
+\hline
+Safari & 17+ & Desktop/iOS & Pass \\
+\hline
+Microsoft Edge & 120+ & Desktop & Pass \\
+\hline
+Android WebView & Latest & Android & Pass \\
+\hline
+\end{tabular}
+\end{table}

@@ -1,0 +1,103 @@
+% ============================================================
+% Personal Finance Manager (PFM) - Academic Report
+% Main Document
+% ============================================================
+
+\documentclass[12pt, a4paper]{report}
+
+% Include preamble (packages, settings, formatting)
+\input{preamble}
+
+% ============================================================
+% DOCUMENT BEGINS
+% ============================================================
+\begin{document}
+
+% ------------------------------------------------------------
+% PRELIMINARY PAGES (Roman Numerals)
+% ------------------------------------------------------------
+\pagenumbering{roman}
+\pagestyle{plain}
+
+% Cover Page
+\input{preliminaries/cover}
+\newpage
+
+% Title Page
+\input{preliminaries/title}
+\newpage
+
+% Declaration
+\input{preliminaries/declaration}
+\newpage
+
+% Supervisor's Recommendation
+\input{preliminaries/supervisor-recommendation}
+\newpage
+
+% Examiners' Approval
+\input{preliminaries/examiner-approval}
+\newpage
+
+% Acknowledgement
+\input{preliminaries/acknowledgement}
+\newpage
+
+% Abstract
+\input{preliminaries/abstract}
+\newpage
+
+% Table of Contents
+\tableofcontents
+\newpage
+
+% List of Tables
+\listoftables
+\addcontentsline{toc}{chapter}{List of Tables}
+\newpage
+
+% List of Figures
+\listoffigures
+\addcontentsline{toc}{chapter}{List of Figures}
+\newpage
+
+% List of Abbreviations
+\input{preliminaries/abbreviations}
+\newpage
+
+% ------------------------------------------------------------
+% MAIN BODY (Arabic Numerals)
+% ------------------------------------------------------------
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
+% Chapter 1: Introduction
+\input{chapters/01-introduction}
+
+% Chapter 2: Background Study and Literature Review
+\input{chapters/02-background-literature}
+
+% Chapter 3: System Analysis and Design
+\input{chapters/03-system-analysis-design}
+
+% Chapter 4: Implementation and Testing
+\input{chapters/04-implementation-testing}
+
+% Chapter 5: Conclusion and Future Recommendations
+\input{chapters/05-conclusion}
+
+% ------------------------------------------------------------
+% REFERENCES
+% ------------------------------------------------------------
+\bibliographystyle{plain}
+\bibliography{references/references}
+\addcontentsline{toc}{chapter}{References}
+
+% ------------------------------------------------------------
+% APPENDICES
+% ------------------------------------------------------------
+\appendix
+\input{appendices/appendix-a-code-samples}
+\input{appendices/appendix-b-test-cases}
+
+\end{document}

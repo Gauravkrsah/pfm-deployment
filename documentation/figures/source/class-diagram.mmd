@@ -1,0 +1,46 @@
+classDiagram
+    class User {
+        +UUID id
+        +String email
+        +String displayName
+        +createGroup()
+        +addExpense()
+    }
+    
+    class Group {
+        +UUID id
+        +String name
+        +String type
+        +getExpenses()
+        +addMember()
+    }
+    
+    class Expense {
+        +UUID id
+        +Float amount
+        +String item
+        +String category
+        +String paidBy
+        +String type
+        +Date createdAt
+    }
+    
+    class NLPService {
+        +ExpenseParser parser
+        +parseExpense(text)
+        +detectCategory(item)
+        +detectPerson(text)
+    }
+    
+    class RAGService {
+        +queryExpenses(query, data)
+        +prepareContext(data)
+        +generateResponse(context)
+    }
+    
+    User "1" --> "*" Group : belongs to
+    Group "1" --> "*" Expense : contains
+    User "1" --> "*" Expense : creates
+    
+    NLPService ..> Expense : creates
+    RAGService ..> Expense : reads

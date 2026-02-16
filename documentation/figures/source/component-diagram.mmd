@@ -1,0 +1,37 @@
+flowchart TB
+    subgraph Frontend ["Frontend (React)"]
+        Chat[Chat Component]
+        Table[Table Component]
+        Analytics[Analytics Component]
+        Loan[Loan Component]
+        State[State Management]
+    end
+    
+    subgraph Backend ["Backend (FastAPI)"]
+        API[API Router]
+        NLP[NLP Service]
+        RAG[RAG Service]
+        Analyzer[Expense Analyzer]
+        Auth[Auth Handler]
+    end
+    
+    subgraph Database ["Supabase"]
+        PG[(PostgreSQL)]
+        RT[Realtime]
+    end
+    
+    subgraph Cloud ["Google Cloud"]
+        AI[Gemini AI]
+    end
+    
+    Chat --> API
+    Table --> API
+    State --> PG
+    
+    API --> NLP
+    API --> RAG
+    
+    NLP --> AI
+    RAG --> AI
+    
+    API --> PG

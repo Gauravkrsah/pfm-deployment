@@ -1,0 +1,30 @@
+flowchart LR
+    User["User"]
+    Gemini["Gemini AI"]
+    
+    subgraph PFM ["Personal Finance Manager"]
+        UC1([Add Expense - Natural Language])
+        UC2([Edit/Delete Expense])
+        UC3([Categorize Expense])
+        UC4([Manage Groups])
+        UC5([Track Loans])
+        UC6([View Analytics])
+        UC7([Query Expenses - RAG])
+        UC8([Login/Register])
+    end
+    
+    User --> UC1
+    User --> UC2
+    User --> UC4
+    User --> UC5
+    User --> UC6
+    User --> UC7
+    User --> UC8
+    
+    UC1 -.->|include| UC3
+    UC1 -.->|uses| Gemini
+    UC7 -.->|uses| Gemini
+    UC3 -.->|uses| Gemini
+    
+    style User fill:#f9f,stroke:#333,stroke-width:2px
+    style Gemini fill:#ccf,stroke:#333,stroke-width:2px

@@ -1,0 +1,342 @@
+% ============================================================
+% Chapter 3: System Analysis and Design
+% ============================================================
+
+\chapter{System Analysis and Design}
+
+\section{System Analysis}
+
+\subsection{Requirement Analysis}
+
+\subsubsection{Functional Requirements}
+
+The functional requirements define what the system should do. They are represented using Use Case diagrams and descriptions.
+
+\paragraph{Use Case Diagram}
+
+Figure \ref{fig:use-case} shows the main use cases of the Personal Finance Manager system.
+
+\begin{figure}[H]
+    \centering
+    % Placeholder for use case diagram
+    \includegraphics[width=\textwidth]{diagrams/use-case-diagram.png}
+    \caption{Use Case Diagram for Personal Finance Manager}
+    \label{fig:use-case}
+\end{figure}
+
+\paragraph{Use Case Descriptions}
+
+\begin{table}[H]
+\centering
+\caption{Use Case: Add Expense via Natural Language}
+\label{tab:uc-add-expense}
+\begin{tabular}{|p{4cm}|p{9cm}|}
+\hline
+\textbf{Use Case ID} & UC-001 \\
+\hline
+\textbf{Use Case Name} & Add Expense via Natural Language \\
+\hline
+\textbf{Actor} & User \\
+\hline
+\textbf{Description} & User adds an expense by typing in natural language \\
+\hline
+\textbf{Precondition} & User is logged in and has selected a group \\
+\hline
+\textbf{Main Flow} & 
+1. User types expense in natural language (e.g., ``biryani 500'')\\
+2. System parses the input using NLP\\
+3. System extracts amount, item, category, and person (if any)\\
+4. System displays parsed expense confirmation\\
+5. User confirms the expense\\
+6. System saves the expense to database \\
+\hline
+\textbf{Postcondition} & Expense is recorded in the database \\
+\hline
+\textbf{Alternative Flow} & If parsing fails, system prompts user to rephrase \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Use Case: Query Expenses}
+\label{tab:uc-query}
+\begin{tabular}{|p{4cm}|p{9cm}|}
+\hline
+\textbf{Use Case ID} & UC-002 \\
+\hline
+\textbf{Use Case Name} & Query Expenses via Natural Language \\
+\hline
+\textbf{Actor} & User \\
+\hline
+\textbf{Description} & User queries expenses using natural language \\
+\hline
+\textbf{Precondition} & User is logged in with expense data available \\
+\hline
+\textbf{Main Flow} & 
+1. User types query (e.g., ``How much on food this month?'')\\
+2. System analyzes query intent\\
+3. System retrieves relevant expenses\\
+4. System generates response using RAG\\
+5. System displays response to user \\
+\hline
+\textbf{Postcondition} & User receives answer to query \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsubsection{Non-Functional Requirements}
+
+\begin{table}[H]
+\centering
+\caption{Non-Functional Requirements}
+\label{tab:nfr}
+\begin{tabular}{|p{3cm}|p{10cm}|}
+\hline
+\textbf{Requirement} & \textbf{Description} \\
+\hline
+Performance & System should parse expenses within 2 seconds \\
+\hline
+Availability & System should be available 99\% of the time \\
+\hline
+Security & User data must be encrypted; authentication required \\
+\hline
+Usability & Interface should be intuitive and mobile-friendly \\
+\hline
+Scalability & System should handle 1000+ concurrent users \\
+\hline
+Responsiveness & UI should adapt to different screen sizes \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Feasibility Analysis}
+
+\subsubsection{Technical Feasibility}
+
+The project is technically feasible because:
+\begin{itemize}
+    \item React and FastAPI are mature, well-documented technologies
+    \item Google Gemini AI provides reliable NLP capabilities via API
+    \item Supabase offers a complete backend-as-a-service solution
+    \item Capacitor enables cross-platform deployment from a single codebase
+\end{itemize}
+
+\subsubsection{Operational Feasibility}
+
+The system is operationally feasible:
+\begin{itemize}
+    \item Natural language input reduces learning curve
+    \item Automatic categorization simplifies user workflow
+    \item Mobile-first design aligns with user preferences
+\end{itemize}
+
+\subsubsection{Economic Feasibility}
+
+The project is economically feasible:
+\begin{itemize}
+    \item All core technologies are open-source or have free tiers
+    \item Supabase free tier supports up to 500MB database
+    \item Gemini API offers free tier for development
+    \item Hosting costs are minimal with serverless deployment
+\end{itemize}
+
+\subsubsection{Schedule Feasibility}
+
+The project timeline of one semester (4 months) is feasible given the scope and available resources.
+
+\subsection{Object Modeling}
+
+\subsubsection{Class Diagram}
+
+Figure \ref{fig:class-diagram} shows the main classes and their relationships.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{diagrams/class-diagram.png}
+    \caption{Class Diagram for Personal Finance Manager}
+    \label{fig:class-diagram}
+\end{figure}
+
+\paragraph{Main Classes:}
+
+\begin{itemize}
+    \item \textbf{User}: Represents authenticated users
+    \item \textbf{Expense}: Represents individual expense records
+    \item \textbf{Group}: Represents expense groups (personal, family, etc.)
+    \item \textbf{NLPService}: Handles natural language parsing
+    \item \textbf{RAGService}: Handles query processing
+    \item \textbf{ExpenseAnalyzer}: Provides expense analysis
+\end{itemize}
+
+\subsection{Dynamic Modeling}
+
+\subsubsection{Sequence Diagram: Expense Parsing}
+
+Figure \ref{fig:sequence-parse} shows the sequence of operations for parsing an expense.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{diagrams/sequence-diagram.png}
+    \caption{Sequence Diagram for Expense Parsing}
+    \label{fig:sequence-parse}
+\end{figure}
+
+\subsubsection{State Diagram: Expense Transaction}
+
+Figure \ref{fig:state-diagram} shows the states of an expense transaction.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{diagrams/state-diagram.png}
+    \caption{State Diagram for Expense Transaction}
+    \label{fig:state-diagram}
+\end{figure}
+
+\subsection{Process Modeling}
+
+\subsubsection{Activity Diagram: Add Expense}
+
+Figure \ref{fig:activity-add} shows the activity flow for adding an expense.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{diagrams/activity-diagram.png}
+    \caption{Activity Diagram for Adding Expense}
+    \label{fig:activity-add}
+\end{figure}
+
+\section{System Design}
+
+\subsection{System Architecture}
+
+Figure \ref{fig:system-arch} illustrates the high-level architecture of the Personal Finance Manager system, showcasing the interaction between the client (React/Capacitor), backend (FastAPI), and external services (Gemini, Supabase).
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{diagrams/system-architecture.png}
+    \caption{System Architecture Diagram}
+    \label{fig:system-arch}
+\end{figure}
+
+\subsection{Refined UML Diagrams}
+
+\subsubsection{Component Diagram}
+
+Figure \ref{fig:component-diagram} shows the major components of the system.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{diagrams/component-diagram.png}
+    \caption{Component Diagram}
+    \label{fig:component-diagram}
+\end{figure}
+
+\textbf{Components:}
+
+\begin{itemize}
+    \item \textbf{Frontend Components}: React UI components (Chat, Table, Analytics, etc.)
+    \item \textbf{API Layer}: FastAPI REST endpoints
+    \item \textbf{Service Layer}: NLPService, RAGService, ExpenseAnalyzer
+    \item \textbf{External Services}: Gemini AI, Supabase
+\end{itemize}
+
+\subsubsection{Deployment Diagram}
+
+Figure \ref{fig:deployment-diagram} shows the deployment architecture.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{diagrams/deployment-diagram.png}
+    \caption{Deployment Diagram}
+    \label{fig:deployment-diagram}
+\end{figure}
+
+\textbf{Deployment Components:}
+
+\begin{itemize}
+    \item \textbf{Client Devices}: Web browsers, Android devices
+    \item \textbf{Frontend Server}: Vercel (React app hosting)
+    \item \textbf{Backend Server}: Python/FastAPI on cloud server
+    \item \textbf{Database}: Supabase PostgreSQL
+    \item \textbf{AI Service}: Google Gemini AI (external)
+\end{itemize}
+
+\section{Algorithm Details}
+
+\subsection{NLP Parsing Algorithm}
+
+The NLP parsing algorithm uses a hybrid approach combining regex pattern matching with AI-powered parsing.
+
+\begin{lstlisting}[language=Python, caption=NLP Parsing Algorithm]
+def parse_expense(text):
+    # Step 1: Preprocess text
+    text = preprocess(text)  # Handle "lakh", "crore", "k"
+    
+    # Step 2: Try regex pattern matching
+    for pattern in PATTERNS:
+        match = pattern.match(text)
+        if match:
+            return extract_from_match(match)
+    
+    # Step 3: Fall back to AI parsing
+    ai_result = ai_enhanced_parse(text)
+    
+    # Step 4: Categorize
+    category = detect_category(ai_result.item)
+    
+    # Step 5: Detect person
+    person = detect_person(text, ai_result)
+    
+    return Expense(
+        amount=ai_result.amount,
+        item=ai_result.item,
+        category=category,
+        paid_by=person
+    )
+\end{lstlisting}
+
+\subsection{Category Detection Algorithm}
+
+Categories are detected using keyword matching:
+
+\begin{lstlisting}[language=Python, caption=Category Detection Algorithm]
+CATEGORIES = {
+    'Food': ['rice', 'momo', 'biryani', 'lunch', 'dinner'],
+    'Transport': ['petrol', 'taxi', 'uber', 'bus', 'train'],
+    'Shopping': ['shirt', 'shoes', 'clothes', 'bag'],
+    # ... 20+ categories
+}
+
+def detect_category(item):
+    item_lower = item.lower()
+    for category, keywords in CATEGORIES.items():
+        for keyword in keywords:
+            if keyword in item_lower:
+                return category
+    return 'Other'
+\end{lstlisting}
+
+\subsection{RAG Query Processing}
+
+\begin{lstlisting}[language=Python, caption=RAG Query Processing]
+def process_query(query, expenses):
+    # Step 1: Analyze query intent
+    intent = analyze_intent(query)
+    
+    # Step 2: Retrieve relevant expenses
+    if intent == 'category_query':
+        relevant = filter_by_category(query, expenses)
+    elif intent == 'time_query':
+        relevant = filter_by_time(query, expenses)
+    else:
+        relevant = expenses
+    
+    # Step 3: Build context
+    context = prepare_context(relevant, query)
+    
+    # Step 4: Generate response with LLM
+    response = generate_response(query, context)
+    
+    return response
+\end{lstlisting}

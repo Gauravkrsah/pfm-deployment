@@ -1,0 +1,47 @@
+flowchart TB
+    subgraph Client["Client Layer"]
+        WebApp["React Web App"]
+        MobileApp["Android App (Capacitor)"]
+    end
+    
+    subgraph Frontend["Frontend Layer"]
+        Router["React Router"]
+        Components["UI Components"]
+        State["Context / State"]
+        APIClient["Axios API Client"]
+    end
+    
+    subgraph Backend["Backend Layer (FastAPI)"]
+        API["REST API"]
+        WS["WebSocket Handler"]
+        BS["Business Logic"]
+        NLP["NLP Service"]
+        RAG["RAG Service"]
+    end
+    
+    subgraph External["External Services"]
+        Gemini["Google Gemini AI"]
+        SupabaseDB["Supabase (PostgreSQL)"]
+        Auth["Supabase Auth"]
+    end
+    
+    WebApp --> Router
+    MobileApp --> Router
+    Router --> Components
+    Components --> State
+    State --> APIClient
+    
+    APIClient <--> API
+    APIClient <--> WS
+    
+    API --> BS
+    WS --> BS
+    
+    BS --> NLP
+    BS --> RAG
+    
+    NLP <--> Gemini
+    RAG <--> Gemini
+    
+    BS <--> SupabaseDB
+    API <--> Auth

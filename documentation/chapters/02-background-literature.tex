@@ -1,0 +1,150 @@
+% ============================================================
+% Chapter 2: Background Study and Literature Review
+% ============================================================
+
+\chapter{Background Study and Literature Review}
+
+\section{Background Study}
+
+\subsection{Natural Language Processing (NLP)}
+
+Natural Language Processing (NLP) is a branch of artificial intelligence that deals with the interaction between computers and humans through natural language. NLP enables computers to understand, interpret, and generate human language in a meaningful way \cite{jurafsky2009speech}.
+
+Key NLP techniques used in this project include:
+
+\begin{itemize}
+    \item \textbf{Named Entity Recognition (NER)}: Identifying and classifying named entities (person names, amounts, items) from text
+    \item \textbf{Pattern Matching}: Using regular expressions to identify structured patterns in text
+    \item \textbf{Intent Recognition}: Determining the user's intention from their input
+    \item \textbf{Tokenization}: Breaking down text into individual words or tokens
+\end{itemize}
+
+\subsection{Large Language Models (LLMs)}
+
+Large Language Models are deep learning models trained on vast amounts of text data. They can understand context, generate human-like text, and perform various NLP tasks without explicit programming for each task \cite{brown2020language}.
+
+\textbf{Google Gemini AI}, used in this project, is a multimodal AI model that can understand and generate text, code, and other modalities. Key advantages include:
+
+\begin{itemize}
+    \item Strong reasoning capabilities
+    \item Context-aware understanding
+    \item API-accessible for integration
+    \item Support for structured output generation
+\end{itemize}
+
+\subsection{Retrieval-Augmented Generation (RAG)}
+
+RAG is an AI framework that combines the power of retrieval-based systems with generative models \cite{lewis2020retrieval}. Instead of relying solely on the knowledge encoded in the model's parameters, RAG retrieves relevant information from an external knowledge base and uses it to generate more accurate responses.
+
+In PFM, RAG is used to:
+\begin{enumerate}
+    \item Retrieve relevant expense data based on user queries
+    \item Provide context to the LLM for generating accurate responses
+    \item Enable natural language querying of expense data
+\end{enumerate}
+
+\subsection{Hybrid Parsing Approach}
+
+A hybrid approach combines rule-based parsing (regex patterns) with AI-powered parsing. This offers several advantages:
+
+\begin{itemize}
+    \item \textbf{Speed}: Regex patterns provide instant matching for common formats
+    \item \textbf{Reliability}: Rule-based parsing ensures consistent handling of known patterns
+    \item \textbf{Flexibility}: AI parsing handles complex or ambiguous inputs
+    \item \textbf{Cost Efficiency}: Reduces API calls by handling simple inputs locally
+\end{itemize}
+
+\subsection{Mobile Application Development}
+
+\subsubsection{React}
+
+React is a JavaScript library for building user interfaces, particularly single-page applications. Developed by Facebook, React uses a component-based architecture and virtual DOM for efficient rendering \cite{react2024}.
+
+Key features used in PFM:
+\begin{itemize}
+    \item Component-based architecture
+    \item Hooks for state management
+    \item Context API for global state
+    \item React Router for navigation
+\end{itemize}
+
+\subsubsection{Capacitor}
+
+Capacitor is a cross-platform native runtime that makes it easy to build web applications that run natively on iOS, Android, and the web \cite{capacitor2024}. It provides a bridge between web code and native device capabilities.
+
+\subsection{Backend Technologies}
+
+\subsubsection{FastAPI}
+
+FastAPI is a modern, high-performance web framework for building APIs with Python. It is designed for building APIs with Python 3.7+ using standard Python type hints \cite{fastapi2024}.
+
+Key features:
+\begin{itemize}
+    \item Automatic API documentation (OpenAPI)
+    \item Built-in data validation using Pydantic
+    \item Asynchronous support
+    \item High performance comparable to Node.js and Go
+\end{itemize}
+
+\subsubsection{Supabase}
+
+Supabase is an open-source Firebase alternative providing a PostgreSQL database, authentication, real-time subscriptions, and storage \cite{supabase2024}. Key features used in PFM:
+
+\begin{itemize}
+    \item PostgreSQL database with Row Level Security (RLS)
+    \item Email-based authentication with OTP
+    \item Real-time subscriptions for live updates
+    \item JavaScript and Python SDKs
+\end{itemize}
+
+\section{Literature Review}
+
+\subsection{Existing Personal Finance Applications}
+
+Several personal finance applications exist in the market, each with different approaches:
+
+\begin{table}[H]
+\centering
+\caption{Comparison of Existing Finance Applications}
+\label{tab:app-comparison}
+\begin{tabular}{|p{3cm}|p{3cm}|p{3cm}|p{4cm}|}
+\hline
+\textbf{Application} & \textbf{Input Method} & \textbf{Categorization} & \textbf{Limitations} \\
+\hline
+Mint & Manual/Bank Sync & Automatic (rules) & Requires bank integration \\
+\hline
+YNAB & Manual forms & Manual selection & Subscription-based \\
+\hline
+Expense Manager & Form-based & Manual selection & No NLP support \\
+\hline
+Toshl Finance & Manual/Voice & Semi-automatic & Limited AI capabilities \\
+\hline
+\textbf{PFM (This Project)} & Natural Language & AI + Regex hybrid & Requires internet \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{NLP in Financial Applications}
+
+Research on NLP applications in finance has grown significantly. Zhang et al. \cite{zhang2020nlp} demonstrated the effectiveness of transformer-based models for financial text understanding. The use of named entity recognition for extracting financial entities has been explored by various researchers.
+
+\subsection{Voice and Text-Based Expense Tracking}
+
+Voice-based expense tracking has been explored in applications like Haptik and some Google Assistant integrations. However, most implementations focus on simple amount extraction rather than comprehensive parsing that includes items, categories, and people involved.
+
+\subsection{RAG in Conversational Systems}
+
+The use of RAG in conversational systems has been studied extensively. Gao et al. \cite{gao2023retrieval} showed that RAG significantly improves the accuracy of responses in knowledge-intensive tasks by grounding the generation in retrieved documents.
+
+\subsection{Summary of Literature Review}
+
+The literature review reveals:
+
+\begin{enumerate}
+    \item Most existing finance applications rely on form-based input or bank integration
+    \item NLP-based expense tracking is an emerging area with limited implementations
+    \item Hybrid approaches combining rule-based and AI parsing offer the best balance of speed and accuracy
+    \item RAG provides a promising approach for natural language querying of structured data
+\end{enumerate}
+
+PFM addresses the gap by providing a comprehensive NLP-based expense tracking solution with RAG-powered querying capabilities.

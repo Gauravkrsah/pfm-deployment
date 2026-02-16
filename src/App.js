@@ -85,7 +85,6 @@ function App() {
         }
         if (user?.email) {
           const emailName = user.email.split('@')[0]
-          // Clean up email name and capitalize
           const cleanName = emailName.replace(/[^a-zA-Z ]/g, ' ').replace(/\s+/g, ' ').trim()
           return cleanName.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ') || 'Unknown'
         }
@@ -103,7 +102,7 @@ function App() {
           paid_by: expense.paid_by || null,
           date: new Date().toISOString().split('T')[0],
           user_id: user?.id,
-          added_by: displayName  // Always use the actual user who added it
+          added_by: displayName
         }
 
         if (currentGroup) {
@@ -182,7 +181,16 @@ function App() {
               />
             </div>
             <div className="flex-1 overflow-hidden w-full">
-              <Chat key={chatKey} onExpenseAdded={handleExpenseAdded} onTableRefresh={handleTableRefresh} user={user} currentGroup={currentGroup} isVisible={true} />
+              <Chat
+                key={chatKey}
+                onExpenseAdded={handleExpenseAdded}
+                onTableRefresh={handleTableRefresh}
+                user={user}
+                currentGroup={currentGroup}
+                isVisible={true}
+                activeTab={activeTab}
+                showMessagesArea={true}
+              />
             </div>
           </div>
         )}

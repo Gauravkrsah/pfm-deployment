@@ -1,0 +1,30 @@
+sequenceDiagram
+    participant User
+    participant Frontend
+    participant API
+    participant NLPService
+    participant GeminiAI
+    participant Database
+    
+    User->>Frontend: Types "biryani rahul 500"
+    Frontend->>API: POST /parse (text, group_id)
+    API->>NLPService: parse_expense(text)
+    
+    alt Regex Match Found
+        NLPService-->>NLPService: Extract details
+    else Complex Input
+        NLPService->>GeminiAI: Parse Request
+        GeminiAI-->>NLPService: Structured JSON
+    end
+    
+    NLPService-->>NLPService: Categorize & Detect Person
+    NLPService-->>API: Parsed Expense Object
+    API-->>Frontend: Confirmation Preview
+    
+    Frontend->>User: Show Preview (Confirm?)
+    User->>Frontend: Clicks Confirm
+    Frontend->>API: POST /expenses (save)
+    API->>Database: INSERT expense
+    Database-->>API: Success
+    API-->>Frontend: 200 OK
+    Frontend-->>User: "Expense Added!"

@@ -3,7 +3,9 @@ import os
 import sys
 import time
 
-sys.path.append(os.path.join(os.getcwd(), 'backend'))
+# Add project root to path (scripts/utilities -> pfm)
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, PROJECT_ROOT)
 
 try:
     import google.generativeai as genai
@@ -12,7 +14,8 @@ except ImportError as e:
     print(f"ImportError: {e}")
     sys.exit(1)
 
-load_dotenv('backend/.env')
+# Load env from project root
+load_dotenv(os.path.join(PROJECT_ROOT, 'backend/.env'))
 api_key = os.getenv('GEMINI_API_KEY')
 genai.configure(api_key=api_key)
 

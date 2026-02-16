@@ -112,57 +112,91 @@ class ExpenseAnalyzer:
         }
 
     def find_specific_item(self, query: str, expenses_data: List[Dict]) -> Dict[str, Any]:
-        """Find specific item expenses from the data"""
+        """Find specific item or category expenses from the data"""
         if not query:
             return None
             
         query_lower = query.lower()
         
-        # Extract potential item names from query
+        # Extract potential item keywords from query
         item_keywords = []
         words = query_lower.split()
         
+        # Time-related words to skip
+        time_words = ['year', 'month', 'week', 'day', 'today', 'yesterday', 'january', 'february',
+                     'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october',
+                     'november', 'december', 'upto', 'time', '2024', '2025', '2026', '2027']
         # Words that indicate aggregate queries, not specific items
         aggregate_keywords = ['total', 'all', 'everything', 'overall', 'sum', 'entire', 'whole', 'complete']
         # Comprehensive stop words that should never be item keywords
         stop_words = ['i', 'my', 'how', 'much', 'spend', 'spent', 'on', 'for', 'the', 'a', 'an', 
                      'did', 'do', 'have', 'has', 'what', 'is', 'are', 'was', 'were', 'money', 
                      'expenses', 'expense', 'to', 'from', 'with', 'at', 'in', 'of', 'and', 'or',
-                     'this', 'that', 'it', 'me', 'you', 'we', 'they', 'he', 'she', 'am', 'be']
+                     'this', 'that', 'it', 'me', 'you', 'we', 'they', 'he', 'she', 'am', 'be',
+                     'now', 'ever', 'last', 'current', 'past', 'recent', 'till', 'until',
+                     'income', 'salary', 'earning', 'loan', 'lend', 'borrow', 'owe', 'debt']
         
-        # Look for "on [item]" or "for [item]" patterns - ONLY use 'on' and 'for' as triggers
+        # Look for "on [item]" or "for [item]" patterns
         for i, word in enumerate(words):
             if word in ['on', 'for'] and i + 1 < len(words):
                 next_word = words[i + 1]
-                # Skip if next word is an aggregate keyword, stop word, or too short
                 if (next_word not in aggregate_keywords and 
                     next_word not in stop_words and 
+                    next_word not in time_words and
                     len(next_word) > 2):
                     item_keywords.append(next_word)
         
-        # Also check for direct item mentions
-        common_items = ['momo', 'biryani', 'tea', 'coffee', 'lunch', 'dinner', 'grocery', 'petrol', 'taxi', 'rent', 'chicken', 'lassi', 'dahi', 'ghee', 'chiya', 'rice', 'soap', 'water']
-        for item in common_items:
-            if item in query_lower and item not in item_keywords:
-                item_keywords.append(item)
+        # Also check for remaining content words
+        if not item_keywords:
+            for word in words:
+                if (word not in stop_words and word not in aggregate_keywords 
+                    and word not in time_words and len(word) > 2):
+                    item_keywords.append(word)
         
         if not item_keywords:
-            # Fallback: Check if the query itself matches any item in expenses_data (for single word/short queries)
-            clean_query = query_lower.strip()
-            # Ignore if query is just a stop word or too short
-            if len(clean_query) > 2 and clean_query not in stop_words:
-                for expense in expenses_data:
-                    # Check for exact match or strong partial match (word boundary)
-                    item = expense.get('item') or ''
-                    item_lower = item.lower()
-                    if clean_query == item_lower or f" {clean_query} " in f" {item_lower} " or item_lower.startswith(f"{clean_query} ") or item_lower.endswith(f" {clean_query}"):
-                        item_keywords.append(clean_query)
-                        break
+            return None
+        
+        # Collect all unique categories from data
+        all_categories = set()
+        for expense in expenses_data:
+            cat = expense.get('category', '')
+            if cat:
+                all_categories.add(cat.lower())
+        
+        # PRIORITY 1: Check if any keyword matches a CATEGORY name
+        # "food" should match ALL items in the "Food" category
+        # BUT skip "income" and "loan" — process_query has dedicated handlers for those
+        skip_categories = {'income', 'loan'}
+        matched_category = None
+        for keyword in item_keywords:
+            for cat in all_categories:
+                if cat in skip_categories:
+                    continue
+                if keyword in cat or cat in keyword:
+                    matched_category = cat
+                    break
+            if matched_category:
+                break
+        
+        if matched_category:
+            matching_expenses = []
+            total_amount = 0
+            for expense in expenses_data:
+                exp_cat = (expense.get('category') or '').lower()
+                if exp_cat == matched_category:
+                    matching_expenses.append(expense)
+                    total_amount += expense.get('amount', 0)
             
-            if not item_keywords:
-                return None
-            
-        # Find matching expenses
+            if matching_expenses:
+                return {
+                    'item_name': matched_category,
+                    'match_type': 'category',
+                    'total_amount': total_amount,
+                    'count': len(matching_expenses),
+                    'expenses': matching_expenses
+                }
+        
+        # PRIORITY 2: Check item names and remarks
         matching_expenses = []
         total_amount = 0
         
@@ -170,7 +204,6 @@ class ExpenseAnalyzer:
             item_name = expense.get('item') or ''
             remarks = expense.get('remarks') or ''
             
-            # Check if any keyword matches item or remarks
             for keyword in item_keywords:
                 if keyword in item_name.lower() or keyword in remarks.lower():
                     matching_expenses.append(expense)
@@ -180,6 +213,7 @@ class ExpenseAnalyzer:
         if matching_expenses:
             return {
                 'item_name': item_keywords[0],
+                'match_type': 'item',
                 'total_amount': total_amount,
                 'count': len(matching_expenses),
                 'expenses': matching_expenses
@@ -222,6 +256,29 @@ class ExpenseAnalyzer:
         """Extract time period from query and return (start_date, end_date, period_name)"""
         query_lower = query.lower()
         now = datetime.now()
+        
+        # "all time" / "total" / "ever" / "till now" = no filter (return everything)
+        if any(phrase in query_lower for phrase in ['all time', 'till now', 'upto now', 'up to now', 'so far', 'ever']):
+            return (None, None, 'all time')
+        
+        # This year
+        if 'this year' in query_lower or 'current year' in query_lower:
+            start = datetime(now.year, 1, 1)
+            return (start, now, f'this year ({now.year})')
+        
+        # Last year
+        if 'last year' in query_lower or 'previous year' in query_lower:
+            start = datetime(now.year - 1, 1, 1)
+            end = datetime(now.year, 1, 1) - timedelta(seconds=1)
+            return (start, end, f'last year ({now.year - 1})')
+        
+        # Specific year like "in 2025" or just "2025"
+        year_match = re.search(r'\b(20\d{2})\b', query_lower)
+        if year_match:
+            year = int(year_match.group(1))
+            start = datetime(year, 1, 1)
+            end = datetime(year, 12, 31, 23, 59, 59)
+            return (start, end, f'year {year}')
         
         # This month
         if 'this month' in query_lower or 'current month' in query_lower:
@@ -285,7 +342,116 @@ class ExpenseAnalyzer:
             return (start, now, f'last {days} days')
         
         return (None, None, None)
-    
+
+    def _handle_loan_query(self, query_lower: str, analysis: Dict[str, Any], time_context: str, expenses_data: List[Dict]) -> str:
+        """Handle loan-related queries"""
+        # Check for specific people matches first
+        mentioned_people = []
+        if expenses_data:
+            loan_people = set()
+            for exp in expenses_data:
+                if exp.get('category', '').lower() == 'loan' and exp.get('paid_by'):
+                    loan_people.add(exp['paid_by'].lower())
+            
+            mentioned_people = [p for p in loan_people if p in query_lower]
+        
+        # If specific people are mentioned, return stats just for them
+        if mentioned_people:
+            f_given = 0
+            f_received = 0
+            f_people_stats = {}
+            
+            for exp in expenses_data:
+                if exp.get('category', '').lower() == 'loan' and exp.get('paid_by', '').lower() in mentioned_people:
+                    person = exp['paid_by'].title()
+                    amount = exp.get('amount', 0)
+                    
+                    if person not in f_people_stats:
+                        f_people_stats[person] = 0
+                    
+                    if amount > 0:
+                        f_given += amount
+                        f_people_stats[person] += amount
+                    else:
+                        f_received += abs(amount)
+                        f_people_stats[person] -= abs(amount)
+            
+            # Format detailed string for these people
+            people_status = []
+            for p, net in f_people_stats.items():
+                if net > 0:
+                    people_status.append(f"{p}: owes you Rs.{net}")
+                elif net < 0:
+                    people_status.append(f"{p}: you owe Rs.{abs(net)}")
+                else:
+                    people_status.append(f"{p}: settled")
+            
+            return f"Loan status for {', '.join([p.title() for p in mentioned_people])}: {'; '.join(people_status)}."
+
+        given = analysis.get('total_loans_given', 0)
+        received = analysis.get('total_loans_received', 0)
+        net_loan = analysis.get('net_loan', 0)
+        
+        if given == 0 and received == 0:
+            return f"No loan transactions found{time_context}."
+        
+        # Check if user wants detailed breakdown
+        wants_details = any(word in query_lower for word in ['detail', 'breakdown', 'who', 'everyone', 'person', 'list', 'each'])
+        
+        if wants_details and expenses_data:
+            person_map = {}
+            for exp in expenses_data:
+                if exp.get('category', '').lower() == 'loan':
+                    person = exp.get('paid_by')
+                    if not person:
+                        # Try to extract from remarks if paid_by is missing
+                        remarks = exp.get('remarks', '')
+                        if ' to ' in remarks:
+                            person = remarks.split(' to ')[1].split()[0]
+                        elif ' from ' in remarks:
+                            person = remarks.split(' from ')[1].split()[0]
+                        elif ' by ' in remarks:
+                            person = remarks.split(' by ')[1].split()[0]
+                        else:
+                            person = 'Unknown'
+                    
+                    person = person.title()
+                    if person not in person_map:
+                        person_map[person] = {'given': 0, 'received': 0}
+                    
+                    amount = exp.get('amount', 0)
+                    if amount > 0:
+                        person_map[person]['given'] += amount
+                    else:
+                        person_map[person]['received'] += abs(amount)
+            
+            details = []
+            for person, data in person_map.items():
+                p_given = data['given']
+                p_received = data['received']
+                p_net = p_given - p_received
+                
+                status = ""
+                if p_net > 0:
+                    status = f"owes you Rs.{p_net}"
+                elif p_net < 0:
+                    status = f"you owe Rs.{abs(p_net)}"
+                else:
+                    status = "settled"
+                    
+                details.append(f"{person}: {status}")
+            
+            return f"Loan Details{time_context}:\n" + "\n".join(details)
+
+        parts = []
+        if given > 0:
+            parts.append(f"Given: Rs.{given} ({analysis.get('loan_given_count', 0)} txn)")
+        if received > 0:
+            parts.append(f"Received: Rs.{received} ({analysis.get('loan_received_count', 0)} txn)")
+        
+        parts.append(f"Net Position: Rs.{abs(net_loan)} ({'You are owed' if net_loan >= 0 else 'You owe'})")
+        return f"Loan Summary{time_context}: {'; '.join(parts)}. Ask 'who owes me' for details."
+
     def process_query(self, query: str, analysis: Dict[str, Any], context: str = "personal", expenses_data: List[Dict] = None) -> str:
         """Process natural language queries about expenses with advanced pattern matching"""
         query_lower = query.lower()
@@ -308,6 +474,17 @@ class ExpenseAnalyzer:
             time_context = f" in {period_name}"
         else:
             time_context = ""
+        
+        # INCOME QUERIES — check before item matching
+        if any(word in query_lower for word in ['income', 'salary', 'earning', 'received', 'got']):
+            if analysis.get('total_income', 0) > 0:
+                return f"Your total income{time_context}: Rs.{analysis['total_income']} across {analysis['income_count']} transactions. Net balance: Rs.{analysis['net_balance']} ({'surplus' if analysis['net_balance'] >= 0 else 'deficit'})."
+            else:
+                return f"No income recorded{time_context}."
+        
+        # LOAN QUERIES — check before item matching
+        if any(word in query_lower for word in ['loan', 'lend', 'lent', 'borrow', 'owe', 'debt', 'udhar', 'own', 'payable', 'receiveable']):
+            return self._handle_loan_query(query_lower, analysis, time_context, expenses_data)
         
         # ITEM-SPECIFIC QUERIES - Check these FIRST before category matching
         # This ensures "tea" matches the tea item, not the food category that contains "tea" as a keyword
@@ -385,118 +562,6 @@ class ExpenseAnalyzer:
                 return f"Your total income{time_context}: Rs.{analysis['total_income']} across {analysis['income_count']} transactions. Net balance: Rs.{analysis['net_balance']} ({'surplus' if analysis['net_balance'] >= 0 else 'deficit'})."
             else:
                 return f"No income recorded{time_context}."
-
-        # Loan queries
-        if any(word in query_lower for word in ['loan', 'lend', 'lent', 'borrow', 'owe', 'debt', 'udhar', 'own', 'payable', 'receiveable']):
-            # Check for specific people matches first
-            mentioned_people = []
-            if expenses_data:
-                loan_people = set()
-                for exp in expenses_data:
-                    if exp.get('category', '').lower() == 'loan' and exp.get('paid_by'):
-                        loan_people.add(exp['paid_by'].lower())
-                
-                mentioned_people = [p for p in loan_people if p in query_lower]
-            
-            # If specific people are mentioned, return stats just for them
-            if mentioned_people:
-                f_given = 0
-                f_received = 0
-                f_people_stats = {}
-                
-                for exp in expenses_data:
-                    if exp.get('category', '').lower() == 'loan' and exp.get('paid_by', '').lower() in mentioned_people:
-                        person = exp['paid_by'].title()
-                        amount = exp.get('amount', 0)
-                        
-                        if person not in f_people_stats:
-                            f_people_stats[person] = 0
-                        
-                        if amount > 0:
-                            f_given += amount
-                            f_people_stats[person] += amount
-                        else:
-                            f_received += abs(amount)
-                            f_people_stats[person] -= abs(amount)
-                
-                f_net = f_given - f_received
-                
-                # Format detailed string for these people
-                people_status = []
-                for p, net in f_people_stats.items():
-                    if net > 0:
-                        people_status.append(f"{p}: owes you Rs.{net}")
-                    elif net < 0:
-                        people_status.append(f"{p}: you owe Rs.{abs(net)}")
-                    else:
-                        people_status.append(f"{p}: settled")
-                
-                return f"Loan status for {', '.join([p.title() for p in mentioned_people])}: {'; '.join(people_status)}."
-
-            given = analysis.get('total_loans_given', 0)
-            received = analysis.get('total_loans_received', 0)
-            net_loan = analysis.get('net_loan', 0)
-            
-            if given == 0 and received == 0:
-                return f"No loan transactions found{time_context}."
-            
-            # Check if user wants detailed breakdown
-            wants_details = any(word in query_lower for word in ['detail', 'breakdown', 'who', 'everyone', 'person', 'list', 'each'])
-            
-            if wants_details and expenses_data:
-                person_map = {}
-                for exp in expenses_data:
-                    if exp.get('category', '').lower() == 'loan':
-                        person = exp.get('paid_by')
-                        if not person:
-                            # Try to extract from remarks if paid_by is missing
-                            remarks = exp.get('remarks', '')
-                            if ' to ' in remarks:
-                                person = remarks.split(' to ')[1].split()[0]
-                            elif ' from ' in remarks:
-                                person = remarks.split(' from ')[1].split()[0]
-                            elif ' by ' in remarks:
-                                person = remarks.split(' by ')[1].split()[0]
-                            else:
-                                person = 'Unknown'
-                        
-                        person = person.title()
-                        if person not in person_map:
-                            person_map[person] = {'given': 0, 'received': 0}
-                        
-                        amount = exp.get('amount', 0)
-                        if amount > 0:
-                            person_map[person]['given'] += amount
-                        else:
-                            person_map[person]['received'] += abs(amount)
-                
-                details = []
-                for person, data in person_map.items():
-                    p_given = data['given']
-                    p_received = data['received']
-                    p_net = p_given - p_received
-                    
-                    status = ""
-                    if p_net > 0:
-                        status = f"owes you Rs.{p_net}"
-                    elif p_net < 0:
-                        status = f"you owe Rs.{abs(p_net)}"
-                    else:
-                        status = "settled"
-                        
-                    details.append(f"{person}: {status}")
-                
-                return f"Loan Details{time_context}:\n" + "\n".join(details)
-
-            parts = []
-            if given > 0:
-                parts.append(f"Given: Rs.{given} ({analysis.get('loan_given_count', 0)} txn)")
-            if received > 0:
-                parts.append(f"Received: Rs.{received} ({analysis.get('loan_received_count', 0)} txn)")
-            
-            parts.append(f"Net Position: Rs.{abs(net_loan)} ({'You are owed' if net_loan >= 0 else 'You owe'})")
-            
-            return f"Loan Update{time_context}: " + "; ".join(parts) + "."
 
         # Total/Summary queries
         if any(word in query_lower for word in ['total', 'all', 'overall', 'everything', 'entire', 'whole']):

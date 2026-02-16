@@ -91,6 +91,17 @@ export default function GroupManager({ user, currentGroup, onGroupChange, onClea
 
       const combined = membersData.map(member => {
         const userInfo = usersData.find(u => u.id === member.user_id)
+        // If no profile exists but this is the current user, use auth data
+        if (!userInfo && member.user_id === user.id) {
+          return {
+            user_id: member.user_id,
+            users: {
+              id: user.id,
+              full_name: user.user_metadata?.name || user.user_metadata?.full_name || null,
+              email: user.email
+            }
+          }
+        }
         return {
           user_id: member.user_id,
           users: userInfo || null
@@ -103,7 +114,7 @@ export default function GroupManager({ user, currentGroup, onGroupChange, onClea
     } finally {
       setLoadingMembers(false)
     }
-  }, [currentGroup])
+  }, [currentGroup, user])
 
   useEffect(() => {
     if (user) {
@@ -418,10 +429,10 @@ export default function GroupManager({ user, currentGroup, onGroupChange, onClea
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <div className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
-                                    {member.users?.full_name || member.users?.email?.split('@')[0]}
+                                    {member.users?.full_name || member.users?.email?.split('@')[0] || 'Unknown User'}
                                   </div>
                                   <div className="text-[10px] text-gray-500 dark:text-gray-400 truncate">
-                                    {member.users?.email}
+                                    {member.users?.email || 'No email available'}
                                   </div>
                                 </div>
                                 {isAdmin && <span className="text-[10px] font-bold px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded-full">Admin</span>}

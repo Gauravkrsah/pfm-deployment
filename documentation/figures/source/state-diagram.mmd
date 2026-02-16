@@ -1,0 +1,15 @@
+stateDiagram-v2
+    [*] --> Draft
+    
+    Draft --> Parsed : User Input Text
+    Parsed --> Categorized : NLP Processing
+    
+    Categorized --> Confirmed : User Confirmation
+    Categorized --> Edited : User Edits
+    Edited --> Confirmed : User Confirmation
+    
+    Confirmed --> Saved : API Success
+    Saved --> [*]
+    
+    Saved --> Deleted : User Action
+    Deleted --> [*]

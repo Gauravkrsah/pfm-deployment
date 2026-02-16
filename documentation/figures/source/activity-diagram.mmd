@@ -1,0 +1,23 @@
+flowchart TD
+    Start([Start]) --> Login{Logged In?}
+    Login -- No --> Auth[Authenticate]
+    Login -- Yes --> SelectGroup[Select Group]
+    
+    Auth --> SelectGroup
+    SelectGroup --> Input[Enter Expense Text]
+    Input --> Parse[NLP Parsing]
+    
+    Parse --> Check{Confidence High?}
+    Check -- Yes --> AutoCat[Auto Categorize]
+    Check -- No --> AIParse[Gemini AI Parse]
+    AIParse --> AutoCat
+    
+    AutoCat --> Preview[Show Preview]
+    Preview --> Correct{Is Correct?}
+    
+    Correct -- No --> Edit[Manual Edit]
+    Edit --> Preview
+    
+    Correct -- Yes --> Save[Save to DB]
+    Save --> UpdateUI[Update Tables/Charts]
+    UpdateUI --> Stop([End])

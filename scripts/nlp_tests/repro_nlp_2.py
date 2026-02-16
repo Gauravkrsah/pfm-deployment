@@ -1,5 +1,10 @@
 import sys
+import os
 from unittest.mock import MagicMock
+
+# Add project root to path (scripts/nlp_tests -> pfm)
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, PROJECT_ROOT)
 
 # Mock dependencies before importing nlp_service
 sys.modules['dotenv'] = MagicMock()
@@ -12,7 +17,7 @@ parser = ExpenseParser()
 test_cases = [
     "rice curry 300",
     "had lunch burger 400",
-    "breakfast 50",
+    "momo 100",
     "biryani rahul 500",
 ]
 

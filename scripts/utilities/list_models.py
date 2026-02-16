@@ -4,8 +4,12 @@ import sys
 import google.generativeai as genai
 from dotenv import load_dotenv
 
-sys.path.append(os.path.join(os.getcwd(), 'backend'))
-load_dotenv('backend/.env')
+# Add project root to path (scripts/utilities -> pfm)
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, PROJECT_ROOT)
+
+# Load env from project root
+load_dotenv(os.path.join(PROJECT_ROOT, 'backend/.env'))
 
 api_key = os.getenv('GEMINI_API_KEY')
 if not api_key:
