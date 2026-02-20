@@ -1,0 +1,104 @@
+\chapter{IMPLEMENTATION AND TESTING}
+
+\section{Implementation}
+
+\subsection{Tools Used}
+The project was implemented using the following set of tools and technologies:
+
+\begin{itemize}
+    \item \textbf{Frontend:} React.js (v18), TailwindCSS (Styling), Recharts (Data Visualization), Capacitor (Mobile Build).
+    \item \textbf{Backend:} Python 3.10+, FastAPI (Web Framework), Uvicorn (ASGI Server), Google Gemini SDK (AI).
+    \item \textbf{Database Platform:} Supabase (PostgreSQL), Supabase Auth.
+    \item \textbf{CASE Tools:} Visual Studio Code, Git, GitHub.
+\end{itemize}
+
+\subsection{Implementation Details of Modules}
+
+\subsubsection{User Authentication Module}
+Implemented using Supabase Auth. Provides functions for \texttt{signUp()}, \texttt{signInWithPassword()}, and \texttt{signOut()}. Handles session management and JWT token verification.
+
+\subsubsection{Expense Parsing Module (Backend)}
+The core feature of the application is the NLP parser. Below is the Python implementation using FastAPI and Gemini:
+
+\begin{lstlisting}[language=Python, caption=Backend API for Expense Parsing]
+# backend/api/expenses.py (Snippet)
+
+@router.post("/parse")
+async def parse_expense(text: str):
+    """
+    Parses natural language text into structured expense data.
+    """
+    prompt = f"""
+    Extract the following details from the text: "{text}"
+    - Amount (number)
+    - Category (Enum: Food, Travel, Bills, Entertainment, Health, Other)
+    - Description (string)
+    
+    Return JSON format only.
+    """
+    
+    response = model.generate_content(prompt)
+    try:
+        data = json.loads(response.text)
+        return {"status": "success", "data": data}
+    except json.JSONDecodeError:
+        return {"status": "error", "message": "Failed to parse"}
+\end{lstlisting}
+
+\subsubsection{Expense Management Module (Frontend)}
+The frontend manages state using React Context API to ensure data consistency across components.
+
+\begin{lstlisting}[language=JavaScript, caption=React Context for Expenses]
+// src/context/ExpenseContext.js (Snippet)
+
+export const ExpenseProvider = ({ children }) => {
+    const [expenses, setExpenses] = useState([]);
+
+    const addExpense = async (text) => {
+        const parsed = await api.parseExpense(text);
+        if (parsed.status === "success") {
+            const newExpense = await api.saveExpense(parsed.data);
+            setExpenses([newExpense, ...expenses]);
+        }
+    };
+
+    return (
+        <ExpenseContext.Provider value={{ expenses, addExpense }}>
+            {children}
+        </ExpenseContext.Provider>
+    );
+};
+\end{lstlisting}
+
+\section{Testing}
+
+\subsection{Test Cases for Unit Testing}
+Unit tests were written for individual backend functions, particularly the NLP parsing logic.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|l|l|l|l|}
+\hline
+\textbf{Test ID} & \textbf{Input} & \textbf{Expected Output} & \textbf{Result} \\ \hline
+UT-01 & "Food 500" & \{amount: 500, category: "Food"\} & Pass \\ \hline
+UT-02 & "Taxi 200" & \{amount: 200, category: "Travel"\} & Pass \\ \hline
+UT-03 & "Invalid" & Error Message & Pass \\ \hline
+\end{tabular}
+\caption{Unit Test Cases}
+\end{table}
+
+\subsection{Test Cases for System Testing}
+System tests verified the end-to-end flow.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|l|l|l|l|}
+\hline
+\textbf{Test ID} & \textbf{Scenario} & \textbf{Expected Outcome} & \textbf{Result} \\ \hline
+ST-01 & User Logs In & Dashboard loads with user data & Pass \\ \hline
+ST-02 & Add Expense via NLP & Expense appears in list & Pass \\ \hline
+ST-03 & View Reports & Charts render with correct data & Pass \\ \hline
+ST-04 & Mobile View & Layout adapts to screen size & Pass \\ \hline
+\end{tabular}
+\caption{System Test Cases}
+\end{table}

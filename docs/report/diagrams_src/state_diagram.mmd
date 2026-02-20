@@ -1,0 +1,12 @@
+stateDiagram-v2
+    [*] --> Idle
+    Idle --> Inputting : User Text Entry
+    Inputting --> Parsing : Submit Command
+    Parsing --> Review : AI Success
+    Parsing --> Error : AI Failure
+    Error --> Inputting : Retry
+    Review --> Saving : Confirm
+    Review --> Inputting : Edit
+    Saving --> Saved : DB Insert Success
+    Saved --> Idle : View Dashboard
+    Saving --> Error : DB Error

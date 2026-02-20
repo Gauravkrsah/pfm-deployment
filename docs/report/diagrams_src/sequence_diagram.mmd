@@ -1,0 +1,18 @@
+sequenceDiagram
+    participant User
+    participant Frontend
+    participant BackendAPI
+    participant GeminiAI
+    participant Database
+
+    User->>Frontend: Enters "Taxi 500"
+    Frontend->>BackendAPI: POST /api/parse {text: "Taxi 500"}
+    BackendAPI->>GeminiAI: Prompt("Parse: Taxi 500")
+    GeminiAI-->>BackendAPI: Returns JSON {amount: 500, category: "Travel"}
+    BackendAPI-->>Frontend: Returns Data Preview
+    User->>Frontend: Confirms & Saves
+    Frontend->>BackendAPI: POST /api/expenses
+    BackendAPI->>Database: INSERT INTO expenses
+    Database-->>BackendAPI: Success
+    BackendAPI-->>Frontend: Success (201 Created)
+    Frontend-->>User: Show Success Notification

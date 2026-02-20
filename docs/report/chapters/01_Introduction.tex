@@ -1,0 +1,67 @@
+\chapter{INTRODUCTION}
+
+\section{Introduction}
+In an era of digital payments and complex financial obligations, effective management of personal finances has become a necessity. Individuals often struggle to keep track of their daily expenses, leading to poor financial health and lack of savings. Traditional methods of expense tracking, such as manual ledgers or spreadsheets, are time-consuming and prone to human error. Even mobile applications often require tedious manual entry of date, amount, category, and description for every transaction, leading to user drop-off.
+
+The \textbf{Personal Finance Manager (PFM)} is designed to address these challenges by leveraging the power of Artificial Intelligence (AI) and Natural Language Processing (NLP). By allowing users to input expenses in natural language---as if they were texting a friend---the system removes the friction of manual data entry. Integrated with Google's Gemini API, the system intelligently understands the context of the expense, categorizes it automatically, and stores it for analysis. This project aims to democratize financial literacy and ease of management through a modern, user-friendly interface accessible on both web and mobile platforms.
+
+\section{Problem Statement}
+Despite the availability of numerous financial management tools, several key issues persist:
+
+\begin{enumerate}
+    \item \textbf{High Data Entry Friction:} Users find it cumbersome to manually select categories, dates, and payment modes for every small transaction.
+    \item \textbf{Lack of Intelligent Categorization:} Most apps rely on rigid, pre-defined rules that fail to understand context (e.g., ``coffee with client'' might be a business expense, not just ``Food'').
+    \item \textbf{Complex Interfaces:} Many financial apps are cluttered with complex charts and features that overwhelm the average user.
+    \item \textbf{Fragmented Experience:} Users often need separate apps for personal tracking and shared expenses (e.g., splitting bills with roommates).
+\end{enumerate}
+
+\section{Objectives}
+The primary objective of this project is to develop a smart, NLP-powered personal finance management system. The specific objectives are:
+
+\begin{enumerate}
+    \item \textbf{To implement Natural Language Expense Logging:} Enable users to log expenses using simple text commands (e.g., ``200 for taxi'').
+    \item \textbf{To automate Expense Categorization:} Utilize Generative AI (Google Gemini) to accurately categorize transactions based on description and context.
+    \item \textbf{To provide Real-time Analytics:} Develop interactive dashboards to visualize spending habits, trends, and budget adherence.
+    \item \textbf{To support Multi-Group Management:} Facilitate shared expense tracking for families, roommates, or trip groups.
+    \item \textbf{To ensure Cross-Platform Accessibility:} Deploy the application as a Progressive Web App (PWA) and an Android application.
+\end{enumerate}
+
+\section{Scope and Limitation}
+
+\subsection{Scope}
+The scope of the PFM project covers:
+\begin{itemize}
+    \item \textbf{User Management:} Secure authentication and profile management via Supabase.
+    \item \textbf{Expense Tracking:} Functionality to add, edit, and delete expenses using both text-based NLP input and manual forms.
+    \item \textbf{AI Integration:} Integration with Google Gemini API for parsing unstructured text into structured JSON data.
+    \item \textbf{Visualization:} Graphical representation of financial data using charts and graphs.
+    \item \textbf{Platform:} The application is scoped for Web browsers (Chrome, Firefox, Safari) and Android devices (via Capacitor).
+\end{itemize}
+
+\subsection{Limitation}
+\begin{itemize}
+    \item \textbf{Internet Dependency:} The AI features require an active internet connection to communicate with the Gemini API.
+    \item \textbf{Language Support:} Currently, the NLP parser is optimized for English and Hinglish (Hindi-English mix) and may not support other regional languages effectively.
+    \item \textbf{Bank Integration:} The system does not currently support automatic SMS reading or direct bank account syncing due to security and privacy constraints.
+    \item \textbf{Scalability Constraints:} The free tier of Supabase and Gemini API imposes rate limits which may affect scalability under high load.
+\end{itemize}
+
+\section{Development Methodology}
+The project follows the \textbf{Agile Software Development Methodology}. Agile was chosen for its iterative nature, allowing for continuous feedback and improvement. 
+The development was divided into 2-week sprints:
+\begin{itemize}
+    \item \textbf{Sprint 1:} Requirement gathering and UI protoyping.
+    \item \textbf{Sprint 2:} Backend API development and Database setup.
+    \item \textbf{Sprint 3:} Frontend integration and AI implementation.
+    \item \textbf{Sprint 4:} Testing, Bug fixes, and Documentation.
+\end{itemize}
+
+\section{Report Organization}
+This project report is organized into five chapters:
+\begin{itemize}
+    \item \textbf{Chapter 1: Introduction} outlines the project background, problem, objectives, and scope.
+    \item \textbf{Chapter 2: Background Study and Literature Review} discusses fundamental concepts and reviews similar existing systems.
+    \item \textbf{Chapter 3: System Analysis and Design} details the requirement analysis, feasibility, and comprehensive system design using UML diagrams.
+    \item \textbf{Chapter 4: Implementation and Testing} describes the tools used, implementation details, and testing strategies.
+    \item \textbf{Chapter 5: Conclusion and Future Recommendations} summarizes the project outcomes and suggests future improvements.
+\end{itemize}

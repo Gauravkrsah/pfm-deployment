@@ -1,0 +1,19 @@
+componentDiagram
+    component "Frontend (React)" as FE {
+        [Auth Manager]
+        [Expense Form]
+        [Dashboard UI]
+    }
+    
+    component "Backend (FastAPI)" as BE {
+        [API Router]
+        [NLP Controller]
+        [DB Service]
+    }
+    
+    component "Database (PostgreSQL)" as DB
+    component "Gemini AI API" as AI
+    
+    FE --> BE : HTTPS/JSON
+    BE --> DB : SQL
+    BE --> AI : REST API

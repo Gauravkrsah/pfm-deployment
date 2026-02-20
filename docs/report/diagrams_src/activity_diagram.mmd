@@ -1,0 +1,21 @@
+flowchart TD
+    Start((Start)) --> Login{Authenticated?}
+    Login -->|No| AuthPage[Login Page]
+    AuthPage --> Login
+    Login -->|Yes| Dashboard[View Dashboard]
+    Dashboard --> Action{User Action}
+    
+    Action -->|Add Expense| Input[Input Text/Form]
+    Input --> Process[NLP Processing]
+    Process -->|Valid| Confirm[Confirm Details]
+    Process -->|Invalid| Error[Show Error]
+    Error --> Input
+    
+    Confirm --> Save[(Save to DB)]
+    Save --> UpdateUI[Update Dashboard]
+    UpdateUI --> Dashboard
+    
+    Action -->|View Reports| Reports[Visualize Data]
+    Reports --> Dashboard
+    
+    Action -->|Logout| End((End))

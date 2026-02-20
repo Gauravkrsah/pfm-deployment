@@ -1,0 +1,42 @@
+erDiagram
+    USERS {
+        uuid id PK
+        string email
+        string password_hash
+        string full_name
+        timestamp created_at
+    }
+    EXPENSES {
+        uuid id PK
+        uuid user_id FK
+        decimal amount
+        string description
+        uuid category_id FK
+        date transaction_date
+        uuid group_id FK
+        timestamp created_at
+    }
+    CATEGORIES {
+        uuid id PK
+        string name
+        string icon
+        string type "Income/Expense"
+    }
+    GROUPS {
+        uuid id PK
+        string name
+        uuid created_by FK
+        timestamp created_at
+    }
+    GROUP_MEMBERS {
+        uuid group_id FK
+        uuid user_id FK
+        timestamp joined_at
+    }
+
+    USERS ||--o{ EXPENSES : "logs"
+    USERS ||--o{ GROUPS : "creates"
+    USERS ||--o{ GROUP_MEMBERS : "joins"
+    GROUPS ||--o{ GROUP_MEMBERS : "has"
+    GROUPS ||--o{ EXPENSES : "contains"
+    CATEGORIES ||--o{ EXPENSES : "categorizes"

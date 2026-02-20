@@ -1,0 +1,82 @@
+\chapter{IMPLEMENTATION AND TESTING}
+
+\section{Tools and Technologies Used}
+The project was implemented using the following set of tools and technologies:
+
+\begin{itemize}
+    \item \textbf{Frontend:} React.js (v18), TailwindCSS (Styling), Recharts (Data Visualization), Capacitor (Mobile Build).
+    \item \textbf{Backend:} Python 3.10+, FastAPI (Web Framework), Uvicorn (ASGI Server), Google Gemini SDK (AI).
+    \item \textbf{Database:} Supabase (PostgreSQL), Supabase Auth.
+    \item \textbf{Version Control:} Git \& GitHub.
+    \item \textbf{IDE:} Visual Studio Code.
+\end{itemize}
+
+\section{Implementation Details}
+
+\subsection{Backend: NLP Expense Parsing}
+The core feature of the application is the NLP parser. Below is the Python implementation using FastAPI and Gemini:
+
+\begin{lstlisting}[language=Python, caption=Backend API for Expense Parsing]
+# backend/api/expenses.py (Snippet)
+
+@router.post("/parse")
+async def parse_expense(text: str):
+    """
+    Parses natural language text into structured expense data.
+    """
+    prompt = f"""
+    Extract the following details from the text: "{text}"
+    - Amount (number)
+    - Category (Enum: Food, Travel, Bills, Entertainment, Health, Other)
+    - Description (string)
+    
+    Return JSON format only.
+    """
+    
+    response = model.generate_content(prompt)
+    try:
+        data = json.loads(response.text)
+        return {"status": "success", "data": data}
+    except json.JSONDecodeError:
+        return {"status": "error", "message": "Failed to parse"}
+\end{lstlisting}
+
+\subsection{Frontend: Expense Context}
+The frontend manages state using React Context API to ensure data consistency across components.
+
+\begin{lstlisting}[language=JavaScript, caption=React Context for Expenses]
+// src/context/ExpenseContext.js (Snippet)
+
+export const ExpenseProvider = ({ children }) => {
+    const [expenses, setExpenses] = useState([]);
+
+    const addExpense = async (text) => {
+        const parsed = await api.parseExpense(text);
+        if (parsed.status === "success") {
+            const newExpense = await api.saveExpense(parsed.data);
+            setExpenses([newExpense, ...expenses]);
+        }
+    };
+
+    return (
+        <ExpenseContext.Provider value={{ expenses, addExpense }}>
+            {children}
+        </ExpenseContext.Provider>
+    );
+};
+\end{lstlisting}
+
+\section{Testing Strategy}
+
+\subsection{Unit Testing}
+Unit tests were written for individual backend functions, particularly the NLP parsing logic, to ensure different text inputs return correct JSON structures.
+\begin{itemize}
+    \item \textit{Test Case 1:} Input ``Food 500'' $\rightarrow$ Expect \texttt{\{amount: 500, category: "Food"\}}.
+    \item \textit{Test Case 2:} Input ``Taxi 200'' $\rightarrow$ Expect \texttt{\{amount: 200, category: "Travel"\}}.
+\end{itemize}
+
+\subsection{Integration Testing}
+Integration tests verified the communication between the React frontend and the FastAPI backend. We ensured that data sent from the form is correctly received by the API and stored in the Supabase database.
+
+\subsection{User Acceptance Testing (UAT)}
+The application was tested by a small group of users to verify the accuracy of the AI categorization. Feedback was collected to improve the prompt engineering for edge cases (e.g., ambiguous terms).

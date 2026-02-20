@@ -1,0 +1,9 @@
+flowchart TD
+    subgraph "Level 0 DFD (Context Diagram)"
+        User[User] -->|Text Command/Expense Details| System((PFM System))
+        System -->|Dashboard/Reports| User
+        System -->|Authentication Request| Auth[Auth Provider]
+        Auth -->|Token| System
+        System -->|NLP Parse Request| AI[Gemini AI]
+        AI -->|Structured Data| System
+    end

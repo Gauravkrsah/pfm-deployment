@@ -1,0 +1,37 @@
+classDiagram
+    class User {
+        +UUID id
+        +String email
+        +String fullName
+        +login()
+        +register()
+        +createGroup()
+    }
+    class Expense {
+        +UUID id
+        +Decimal amount
+        +String description
+        +Date date
+        +add()
+        +edit()
+        +delete()
+    }
+    class Category {
+        +UUID id
+        +String name
+        +String icon
+    }
+    class Group {
+        +UUID id
+        +String name
+        +addMember()
+    }
+    class NLPService {
+        +parse(text: String) : ExpenseData
+    }
+    
+    User "1" --> "*" Expense : logs
+    User "1" --> "*" Group : belongs_to
+    Expense "*" --> "1" Category : has
+    Group "1" --> "*" User : has_members
+    Group "1" --> "*" Expense : contains

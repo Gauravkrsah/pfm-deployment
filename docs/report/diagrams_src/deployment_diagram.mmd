@@ -1,0 +1,20 @@
+deploymentDiagram
+    node "User Device" {
+        artifact "Web Browser / Mobile App" as Client
+    }
+    
+    node "Cloud Server (Render/Vercel)" {
+        component "FastAPI Backend" as Server
+    }
+    
+    node "Supabase Cloud" {
+        database "PostgreSQL" as DB
+    }
+    
+    node "Google Cloud" {
+        component "Gemini LLM" as AI
+    }
+    
+    Client -- "HTTPS" --> Server
+    Server -- "TCPIP" --> DB
+    Server -- "HTTPS" --> AI

@@ -1,0 +1,52 @@
+\chapter{SYSTEM METHODOLOGY}
+
+\section{Software Development Life Cycle (SDLC)}
+For the development of the Personal Finance Manager, the \textbf{Agile Methodology} was adopted. Agile is an iterative approach to project management and software development that helps teams deliver value to their customers faster and with fewer headaches.
+
+The development process involved the following phases:
+\begin{enumerate}
+    \item \textbf{Planning:} Defining the scope, objectives, and initial backlog of features (e.g., basic expense logging).
+    \item \textbf{Design:} Creating high-level architecture, database schema, and UI mockups.
+    \item \textbf{Development (Sprints):}
+    \begin{itemize}
+        \item \textit{Sprint 1:} Setup React frontend and FastAPI backend.
+        \item \textit{Sprint 2:} Implement Supabase authentication and database.
+        \item \textit{Sprint 3:} Integrate Gemini API for NLP parsing.
+        \item \textit{Sprint 4:} Build dashboards and deploy to Android via Capacitor.
+    \end{itemize}
+    \item \textbf{Testing:} Continuous unit testing and integration testing during each sprint.
+    \item \textbf{Deployment:} Deploying the web version and generating the Android APK.
+\end{enumerate}
+
+\section{Requirement Analysis}
+
+\subsection{Functional Requirements}
+Functional requirements define the specific behaviors and functions of the system.
+\begin{enumerate}
+    \item \textbf{User Authentication:} Users must be able to sign up, log in, and manage their profiles securely.
+    \item \textbf{Expense Logging:} The system must allow users to input expenses via text command.
+    \item \textbf{AI Parsing:} The system must accurately extract amount, category, and description from the input text.
+    \item \textbf{Dashboard:} Users must see a summary of expenses, category-wise breakdown, and monthly trends.
+    \item \textbf{Group Management:} Users should be able to create groups and add other users for shared expenses.
+    \item \textbf{Editing/Deleting:} Users must be able to modify or remove incorrect entries.
+\end{enumerate}
+
+\subsection{Non-Functional Requirements}
+\begin{enumerate}
+    \item \textbf{Performance:} The system should process NLP queries within 3 seconds.
+    \item \textbf{Scalability:} The database should handle thousands of transactions without significant latency.
+    \item \textbf{Availability:} The application should be available 99.9\% of the time.
+    \item \textbf{Security:} User data must be encrypted in transit and at rest; API keys must be secured.
+    \item \textbf{Usability:} The interface should be intuitive and responsive on mobile devices.
+\end{enumerate}
+
+\section{Feasibility Study}
+
+\subsection{Technical Feasibility}
+The project utilizes established technologies: React for frontend, Python (FastAPI) for backend, and Supabase for database. The integration of Google's Gemini API is well-documented and supported via official SDKs. Thus, the project is technically feasible.
+
+\subsection{Operational Feasibility}
+The application is designed to be user-friendly, requiring no special training. The natural language input mimics daily communication (messaging), making it highly adoptable for users of all ages.
+
+\subsection{Economic Feasibility}
+The development relies on open-source tools (React, FastAPI) and free-tier services (Supabase, Gemini API free tier). The cost of development is primarily time and effort, making it economically viable for a student project or startup MVP.

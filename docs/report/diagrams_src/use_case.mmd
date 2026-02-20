@@ -1,0 +1,25 @@
+usecaseDiagram
+    actor User
+    package "Personal Finance Manager" {
+        usecase "Login / Register" as UC1
+        usecase "Manage Profile" as UC2
+        usecase "Add Expense (NLP Text)" as UC3
+        usecase "Add Expense (Manual)" as UC4
+        usecase "Edit / Delete Expense" as UC5
+        usecase "View Dashboard" as UC6
+        usecase "Manage Categories" as UC7
+        usecase "Manage Groups" as UC8
+        usecase "Export Report" as UC9
+    }
+    
+    User --> UC1
+    User --> UC2
+    User --> UC3
+    User --> UC4
+    User --> UC5
+    User --> UC6
+    User --> UC7
+    User --> UC8
+    User --> UC9
+    
+    UC3 ..> UC4 : <<include>>

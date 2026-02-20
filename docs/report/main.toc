@@ -1,0 +1,57 @@
+\contentsline {chapter}{Acknowledgement}{iv}{chapter*.1}%
+\contentsline {chapter}{Abstract}{v}{chapter*.2}%
+\contentsline {chapter}{List of Abbreviations}{xi}{chapter*.6}%
+\contentsline {chapter}{\numberline {1}INTRODUCTION}{1}{chapter.1}%
+\contentsline {section}{\numberline {1.1}Introduction}{1}{section.1.1}%
+\contentsline {section}{\numberline {1.2}Problem Statement}{1}{section.1.2}%
+\contentsline {section}{\numberline {1.3}Objectives}{2}{section.1.3}%
+\contentsline {section}{\numberline {1.4}Scope and Limitation}{2}{section.1.4}%
+\contentsline {subsection}{\numberline {1.4.1}Scope}{2}{subsection.1.4.1}%
+\contentsline {subsection}{\numberline {1.4.2}Limitation}{3}{subsection.1.4.2}%
+\contentsline {section}{\numberline {1.5}Development Methodology}{3}{section.1.5}%
+\contentsline {section}{\numberline {1.6}Report Organization}{3}{section.1.6}%
+\contentsline {chapter}{\numberline {2}BACKGROUND STUDY AND LITERATURE REVIEW}{5}{chapter.2}%
+\contentsline {section}{\numberline {2.1}Background Study}{5}{section.2.1}%
+\contentsline {section}{\numberline {2.2}Literature Review}{6}{section.2.2}%
+\contentsline {subsection}{\numberline {2.2.1}Mint (Intuit)}{6}{subsection.2.2.1}%
+\contentsline {subsection}{\numberline {2.2.2}You Need A Budget (YNAB)}{6}{subsection.2.2.2}%
+\contentsline {subsection}{\numberline {2.2.3}Splitwise}{6}{subsection.2.2.3}%
+\contentsline {subsection}{\numberline {2.2.4}Research Gap}{7}{subsection.2.2.4}%
+\contentsline {chapter}{\numberline {3}SYSTEM ANALYSIS AND DESIGN}{8}{chapter.3}%
+\contentsline {section}{\numberline {3.1}System Analysis}{8}{section.3.1}%
+\contentsline {subsection}{\numberline {3.1.1}Requirement Analysis}{8}{subsection.3.1.1}%
+\contentsline {subsubsection}{Functional Requirements}{8}{subsubsection*.7}%
+\contentsline {subsubsection}{Non-functional Requirements}{9}{subsubsection*.9}%
+\contentsline {subsection}{\numberline {3.1.2}Feasibility Analysis}{9}{subsection.3.1.2}%
+\contentsline {subsubsection}{Technical Feasibility}{9}{subsubsection*.10}%
+\contentsline {subsubsection}{Operational Feasibility}{10}{subsubsection*.11}%
+\contentsline {subsubsection}{Economic Feasibility}{10}{subsubsection*.12}%
+\contentsline {subsection}{\numberline {3.1.3}Data Modelling: ER Diagram}{10}{subsection.3.1.3}%
+\contentsline {subsection}{\numberline {3.1.4}Process Modelling: DFD}{11}{subsection.3.1.4}%
+\contentsline {subsection}{\numberline {3.1.5}Object Modelling: Object \& Class Diagram}{11}{subsection.3.1.5}%
+\contentsline {subsection}{\numberline {3.1.6}Dynamic Modelling: State \& Sequence Diagram}{12}{subsection.3.1.6}%
+\contentsline {subsubsection}{State Diagram}{12}{subsubsection*.16}%
+\contentsline {subsubsection}{Sequence Diagram}{13}{subsubsection*.18}%
+\contentsline {subsection}{\numberline {3.1.7}Process Modelling: Activity Diagram}{14}{subsection.3.1.7}%
+\contentsline {section}{\numberline {3.2}System Design}{15}{section.3.2}%
+\contentsline {subsection}{\numberline {3.2.1}Architectural Design}{15}{subsection.3.2.1}%
+\contentsline {subsection}{\numberline {3.2.2}Database Schema Design}{15}{subsection.3.2.2}%
+\contentsline {subsection}{\numberline {3.2.3}Interface Design (UI/UX)}{16}{subsection.3.2.3}%
+\contentsline {subsection}{\numberline {3.2.4}Refinement of Classes and Object}{16}{subsection.3.2.4}%
+\contentsline {subsection}{\numberline {3.2.5}Component Diagram}{16}{subsection.3.2.5}%
+\contentsline {subsection}{\numberline {3.2.6}Deployment Diagram}{16}{subsection.3.2.6}%
+\contentsline {section}{\numberline {3.3}Algorithm Details}{17}{section.3.3}%
+\contentsline {chapter}{\numberline {4}IMPLEMENTATION AND TESTING}{18}{chapter.4}%
+\contentsline {section}{\numberline {4.1}Implementation}{18}{section.4.1}%
+\contentsline {subsection}{\numberline {4.1.1}Tools Used}{18}{subsection.4.1.1}%
+\contentsline {subsection}{\numberline {4.1.2}Implementation Details of Modules}{18}{subsection.4.1.2}%
+\contentsline {subsubsection}{User Authentication Module}{18}{subsubsection*.23}%
+\contentsline {subsubsection}{Expense Parsing Module (Backend)}{18}{subsubsection*.24}%
+\contentsline {subsubsection}{Expense Management Module (Frontend)}{19}{subsubsection*.25}%
+\contentsline {section}{\numberline {4.2}Testing}{20}{section.4.2}%
+\contentsline {subsection}{\numberline {4.2.1}Test Cases for Unit Testing}{20}{subsection.4.2.1}%
+\contentsline {subsection}{\numberline {4.2.2}Test Cases for System Testing}{20}{subsection.4.2.2}%
+\contentsline {chapter}{\numberline {5}CONCLUSION AND FUTURE RECOMMENDATIONS}{21}{chapter.5}%
+\contentsline {section}{\numberline {5.1}Conclusion}{21}{section.5.1}%
+\contentsline {section}{\numberline {5.2}Lesson Learnt/Outcome}{21}{section.5.2}%
+\contentsline {section}{\numberline {5.3}Future Recommendations}{22}{section.5.3}%

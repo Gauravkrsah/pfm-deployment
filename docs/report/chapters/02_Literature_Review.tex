@@ -1,0 +1,44 @@
+\chapter{BACKGROUND STUDY AND LITERATURE REVIEW}
+
+\section{Background Study}
+\textit{(Description of fundamental theories, general concepts and terminologies related to the project)}
+
+To understand the development of the Personal Finance Manager, it is essential to grasp the fundamental concepts and technologies involved:
+
+\begin{itemize}
+    \item \textbf{Personal Finance Management (PFM):} The practice of budgeting, saving, and spending monetary resources over time, taking into account various financial risks and future life events.
+    \item \textbf{Natural Language Processing (NLP):} A subfield of artificial intelligence describing the interaction between computers and human language. In this project, NLP is used to interpret unstructured expense descriptions (e.g., "taxi 500") into structured data (Category: Travel, Amount: 500).
+    \item \textbf{Large Language Models (LLMs):} Deep learning algorithms that can recognize, summarize, translate, predict, and generate text and other forms of content based on knowledge gained from massive datasets. We utilize Google's Gemini model for this purpose.
+    \item \textbf{Client-Server Architecture:} A distributed application structure that partitions tasks or workloads between the providers of a resource or service, called servers, and service requesters, called clients. PFM uses React as the client and FastAPI as the server.
+    \item \textbf{REST API (Representational State Transfer):} An architectural style for an application program interface (API) that uses HTTP requests to access and use data.
+\end{itemize}
+
+\section{Literature Review}
+\textit{(Review of the similar projects, theories done by other researchers)}
+
+Several personal finance management applications exist in the market, each offering various features for expense tracking and budgeting. A critical review of these systems provides insights into current standards and gaps.
+
+\subsection{Mint (Intuit)}
+Mint was one of the most popular PFM tools, offering automatic bank synchronization, budgeting, and credit score tracking.
+\begin{itemize}
+    \item \textbf{Overview:} Aggregates all financial accounts in one place.
+    \item \textbf{Theory:} Automates tracking through direct bank connections.
+    \item \textbf{Limitations:} Recently discontinued/migrated to Credit Karma, heavily ad-supported, privacy concerns with bank data.
+\end{itemize}
+
+\subsection{You Need A Budget (YNAB)}
+YNAB focuses on zero-based budgeting, encouraging users to give every dollar a job.
+\begin{itemize}
+    \item \textbf{Theory:} Proactive budgeting rather than reactive tracking.
+    \item \textbf{Limitations:} Expensive subscription model, steep learning curve for new users, requires manual discipline.
+\end{itemize}
+
+\subsection{Splitwise}
+Specifically designed for splitting bills and shared expenses.
+\begin{itemize}
+    \item \textbf{Theory:} Simplified group debt simplification algorithms.
+    \item \textbf{Limitations:} Not a full PFM (lacks personal budgeting, net worth tracking), limited analytics for individual spending.
+\end{itemize}
+
+\subsection{Research Gap}
+Most existing research and products focus either on fully automated bank syncing (which raises privacy/security issues for local contexts) or fully manual entry (which causes user fatigue). There is a lack of "Hybrid" systems that facilitate manual entry through intelligent automation like NLP commands. This project aims to fill this gap.
