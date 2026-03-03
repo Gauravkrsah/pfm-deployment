@@ -64,17 +64,17 @@
   }
 
   .dark {
-    /* Paper - Dark mode backgrounds (Inverse & Shifted to cool grays/blacks) */
-    --color-paper-50: 10 10 12;
-    /* Richer black background */
-    --color-paper-100: 20 20 23;
-    /* Surface color */
-    --color-paper-200: 30 30 35;
-    /* Elevated surface */
-    --color-paper-300: 45 45 50;
-    /* Border / Divider */
-    --color-paper-400: 80 80 85;
-    /* Muted text */
+    /* Paper - Dark mode backgrounds — ChatGPT-style palette */
+    --color-paper-50: 33 33 33;
+    /* #212121 — main chat area background */
+    --color-paper-100: 25 25 25;
+    /* #191919 — nav/sidebar background */
+    --color-paper-200: 47 47 47;
+    /* #2f2f2f — card / input surfaces */
+    --color-paper-300: 61 61 61;
+    /* #3d3d3d — elevated surface / hover */
+    --color-paper-400: 97 97 97;
+    /* #616161 — muted text / borders */
     --color-paper-500: 161 161 170;
     --color-paper-600: 212 212 216;
     --color-paper-700: 228 228 231;
@@ -82,9 +82,9 @@
     --color-paper-900: 250 250 250;
 
     /* Ink - Text for dark mode (Inverted to whites/grays) */
-    --color-ink-50: 10 10 12;
-    --color-ink-100: 24 24 27;
-    --color-ink-200: 39 39 42;
+    --color-ink-50: 33 33 33;
+    --color-ink-100: 24 24 24;
+    --color-ink-200: 47 47 47;
     --color-ink-300: 82 82 91;
     --color-ink-400: 113 113 122;
     --color-ink-500: 161 161 170;
@@ -96,6 +96,7 @@
     /* Pure white text */
     --color-ink-950: 255 255 255;
   }
+
 
   html {
     scroll-behavior: smooth;
@@ -186,7 +187,7 @@
   }
 
   .sidebar {
-    @apply fixed left-0 top-0 h-full w-64 bg-paper-50/95 dark:bg-paper-100/95 backdrop-blur-xl border-r border-paper-200/60 dark:border-paper-300/50 hidden lg:block z-50;
+    @apply fixed left-0 top-0 h-full w-64 bg-[#f9f9f9]/95 dark:bg-paper-100/95 backdrop-blur-xl border-r border-paper-200/60 dark:border-paper-300/50 hidden lg:block z-50;
   }
 
   .bottom-nav {
@@ -197,17 +198,17 @@
   .dark select {
     color-scheme: dark;
     color: rgb(250 250 250) !important;
-    background-color: rgb(30 30 35);
+    background-color: rgb(47 47 47);
   }
 
   .dark select option {
-    background-color: rgb(30 30 35);
+    background-color: rgb(47 47 47);
     color: rgb(250 250 250);
   }
 
   .dark select option:hover,
   .dark select option:checked {
-    background-color: rgb(45 45 50);
+    background-color: rgb(61 61 61);
   }
 }
 
@@ -222,12 +223,12 @@
   }
 
   .dark *::-webkit-scrollbar-thumb {
-    background-color: rgb(45 45 50);
+    background-color: rgb(61 61 61);
     border-radius: 20px;
   }
 
   .dark *::-webkit-scrollbar-thumb:hover {
-    background-color: rgb(80 80 85);
+    background-color: rgb(97 97 97);
   }
 
   .dark *::-webkit-scrollbar-corner {

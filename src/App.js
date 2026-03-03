@@ -190,6 +190,10 @@ function App() {
                 isVisible={true}
                 activeTab={activeTab}
                 showMessagesArea={true}
+                onClearChat={() => {
+                  localStorage.removeItem('pfm_messages')
+                  setChatKey(k => k + 1)
+                }}
               />
             </div>
           </div>
@@ -197,10 +201,10 @@ function App() {
 
         {activeTab === 'expenses' && (
           <div className="flex flex-col h-full relative">
-            <div className="flex-shrink-0 p-4 lg:p-8 lg:pt-8 max-w-7xl mx-auto w-full">
+            <div className="flex-shrink-0 p-4 lg:p-8 lg:pt-8 max-w-[1600px] mx-auto w-full">
               <GroupManager user={user} currentGroup={currentGroup} onGroupChange={setCurrentGroup} />
             </div>
-            <div className="flex-1 overflow-auto px-4 lg:px-8 pb-32 lg:pb-8 max-w-7xl mx-auto w-full">
+            <div className="flex-1 overflow-auto px-4 lg:px-8 pb-32 lg:pb-8 max-w-[1600px] mx-auto w-full">
               <Table ref={tableRef} expenses={expenses} currentGroup={currentGroup} user={user} />
             </div>
             <button
@@ -216,10 +220,10 @@ function App() {
 
         {activeTab === 'income' && (
           <div className="flex flex-col h-full relative">
-            <div className="flex-shrink-0 p-4 lg:p-8 lg:pt-8 max-w-7xl mx-auto w-full">
+            <div className="flex-shrink-0 p-4 lg:p-8 lg:pt-8 max-w-[1600px] mx-auto w-full">
               <GroupManager user={user} currentGroup={currentGroup} onGroupChange={setCurrentGroup} />
             </div>
-            <div className="flex-1 overflow-auto px-4 lg:px-8 pb-32 lg:pb-8 max-w-7xl mx-auto w-full">
+            <div className="flex-1 overflow-auto px-4 lg:px-8 pb-32 lg:pb-8 max-w-[1600px] mx-auto w-full">
               <Income ref={incomeRef} currentGroup={currentGroup} user={user} />
             </div>
             <button
@@ -235,10 +239,10 @@ function App() {
 
         {activeTab === 'loans' && (
           <div className="flex flex-col h-full relative">
-            <div className="flex-shrink-0 p-4 lg:p-8 lg:pt-8 max-w-7xl mx-auto w-full">
+            <div className="flex-shrink-0 p-4 lg:p-8 lg:pt-8 max-w-[1600px] mx-auto w-full">
               <GroupManager user={user} currentGroup={currentGroup} onGroupChange={setCurrentGroup} />
             </div>
-            <div className="flex-1 overflow-auto px-4 lg:px-8 pb-32 lg:pb-8 max-w-7xl mx-auto w-full">
+            <div className="flex-1 overflow-auto px-4 lg:px-8 pb-32 lg:pb-8 max-w-[1600px] mx-auto w-full">
               <Loans ref={loansRef} currentGroup={currentGroup} user={user} />
             </div>
             <button
@@ -254,10 +258,10 @@ function App() {
 
         {activeTab === 'analytics' && (
           <div className="flex flex-col h-full relative">
-            <div className="flex-shrink-0 p-4 lg:p-8 lg:pt-8 max-w-7xl mx-auto w-full">
+            <div className="flex-shrink-0 p-4 lg:p-8 lg:pt-8 max-w-[1600px] mx-auto w-full">
               <GroupManager user={user} currentGroup={currentGroup} onGroupChange={setCurrentGroup} />
             </div>
-            <div className="flex-1 overflow-auto px-4 lg:px-8 pb-32 lg:pb-8 max-w-7xl mx-auto w-full">
+            <div className="flex-1 overflow-auto px-4 lg:px-8 pb-32 lg:pb-8 max-w-[1600px] mx-auto w-full">
               <EnhancedAnalytics currentGroup={currentGroup} user={user} />
             </div>
             <button
@@ -327,7 +331,7 @@ function App() {
   return (
     <ThemeProvider>
       <ToastProvider>
-        <Router>
+        <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <Routes>
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/" element={<MainApp />} />

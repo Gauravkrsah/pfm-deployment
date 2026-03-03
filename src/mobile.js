@@ -7,16 +7,22 @@ export const isMobile = () => {
 };
 
 export const getMobileConfig = () => {
+  let apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000'
+
+  if (typeof window !== 'undefined' && apiUrl.includes('localhost') && window.location.hostname !== 'localhost') {
+    apiUrl = `http://${window.location.hostname}:8000`
+  }
+
   if (isMobile()) {
     return {
-  apiUrl: process.env.REACT_APP_API_URL || 'http://localhost:8000',
+      apiUrl,
       platform: Capacitor.getPlatform()
     };
   }
-    return {
-      apiUrl: process.env.REACT_APP_API_URL || 'http://localhost:8000',
-      platform: 'web'
-    };
+  return {
+    apiUrl,
+    platform: 'web'
+  };
 };
 
 export const initializeMobile = async () => {
@@ -24,10 +30,10 @@ export const initializeMobile = async () => {
     try {
       // Set status bar style
       await StatusBar.setStyle({ style: Style.Light });
-      
+
       // Hide splash screen
       await SplashScreen.hide();
-      
+
       // Mobile app initialized successfully
     } catch (error) {
       // Error handled silently

@@ -1,6 +1,8 @@
 import { useState, useEffect, useImperativeHandle, forwardRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { supabase } from '../supabase'
 import DateRangePicker, { getDateRange } from './ui/DateRangePicker'
+import DeleteConfirmationModal from './ui/DeleteConfirmationModal'
 
 const Loans = forwardRef(({ currentGroup, user }, ref) => {
   const [data, setData] = useState([])
@@ -8,6 +10,7 @@ const Loans = forwardRef(({ currentGroup, user }, ref) => {
   const [editingId, setEditingId] = useState(null)
   const [editForm, setEditForm] = useState({})
   const [showEditModal, setShowEditModal] = useState(false)
+  const [itemToDelete, setItemToDelete] = useState(null)
   const [loading, setLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterType, setFilterType] = useState('all')
@@ -37,8 +40,8 @@ const Loans = forwardRef(({ currentGroup, user }, ref) => {
     }
   }
 
-  const fetchLoans = useCallback(async () => {
-    setLoading(true)
+  const fetchLoans = useCallback(async (showLoading = true) => {
+    if (showLoading) setLoading(true)
     try {
       let query = supabase.from('expenses').select('*')
 
@@ -63,7 +66,7 @@ const Loans = forwardRef(({ currentGroup, user }, ref) => {
     } catch (error) {
       setData([])
     }
-    setLoading(false)
+    if (showLoading) setLoading(false)
   }, [currentGroup, user])
 
   useImperativeHandle(ref, () => ({
@@ -88,7 +91,6 @@ const Loans = forwardRef(({ currentGroup, user }, ref) => {
     if (filterType !== 'all') {
       if (filterType === 'given') {
         filtered = filtered.filter(loan => loan.amount > 0)
-      } else if (filterType === 'received') {
       } else if (filterType === 'received') {
         filtered = filtered.filter(loan => loan.amount < 0)
       }
@@ -127,7 +129,7 @@ const Loans = forwardRef(({ currentGroup, user }, ref) => {
       if (error) throw error
       setEditingId(null)
       setShowEditModal(false)
-      fetchLoans()
+      fetchLoans(false)
     } catch (error) {
       // Error handled silently
     }
@@ -137,7 +139,8 @@ const Loans = forwardRef(({ currentGroup, user }, ref) => {
     try {
       const { error } = await supabase.from('expenses').delete().eq('id', id)
       if (error) throw error
-      fetchLoans()
+      setItemToDelete(null)
+      fetchLoans(false)
     } catch (error) {
       // Error handled silently
     }
@@ -243,7 +246,8 @@ const Loans = forwardRef(({ currentGroup, user }, ref) => {
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-paper-100 dark:border-paper-300/50">
+      {/* Desktop Table View */}
+      <div className="hidden sm:block overflow-x-auto rounded-2xl border border-paper-100 dark:border-paper-300/50">
         <table className="w-full text-sm text-left min-w-[700px]">
           <thead>
             <tr className="bg-paper-50/50 dark:bg-paper-200/50 border-b border-paper-100 dark:border-paper-300/50">
@@ -350,7 +354,7 @@ const Loans = forwardRef(({ currentGroup, user }, ref) => {
                 <td className="p-4 text-right">
                   <div className="flex justify-end gap-3">
                     <button onClick={() => handleEdit(loan)} className="text-blue-600 hover:text-blue-800 font-medium text-sm">Edit</button>
-                    <button onClick={() => handleDelete(loan.id)} className="text-red-600 hover:text-red-800 font-medium text-sm">Delete</button>
+                    <button onClick={() => setItemToDelete(loan)} className="text-red-600 hover:text-red-800 font-medium text-sm">Delete</button>
                   </div>
                 </td>
               </tr>
@@ -366,79 +370,163 @@ const Loans = forwardRef(({ currentGroup, user }, ref) => {
         </table>
       </div>
 
+      {/* Mobile Card View */}
+      <div className="sm:hidden space-y-3">
+        {loading ? (
+          <div className="p-8 text-center text-gray-500">Loading loans...</div>
+        ) : filteredData.length === 0 ? (
+          <div className="p-8 text-center text-gray-500">
+            <p className="text-sm">No loan transactions found.</p>
+          </div>
+        ) : (
+          filteredData.map((loan) => {
+            const item = (loan.item || '').toLowerCase()
+            const remarks = (loan.remarks || '').toLowerCase()
+            let type = 'LOAN'
+            let bgClass = 'bg-gray-100 text-gray-700 border-gray-200'
+
+            if (item.includes('loan repayment') || item.includes('repaid') ||
+              remarks.includes('paid back loan') || remarks.includes('repaid loan')) {
+              type = 'PAID'
+              bgClass = 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800/30'
+            } else if (item.includes('loan received back') || item.includes('received back') ||
+              remarks.includes('paid back their loan') || remarks.includes('got loan back')) {
+              type = 'RECEIVED'
+              bgClass = 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800/30'
+            } else if (item.includes('lent') || item.includes('gave') || item.includes('loan given')) {
+              type = 'LENT'
+              bgClass = 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800/30'
+            } else if (item.includes('borrowed') || item.includes('loan taken') || item.includes('took') || item.includes('loan from')) {
+              type = 'BORROWED'
+              bgClass = 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-800/30'
+            } else if (item.includes('received') || item.includes('got')) {
+              type = 'RECEIVED'
+              bgClass = 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800/30'
+            } else if (item.includes('paid')) {
+              type = 'PAID'
+              bgClass = 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800/30'
+            } else if (loan.amount > 0) {
+              type = 'LENT'
+              bgClass = 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800/30'
+            } else {
+              type = 'BORROWED'
+              bgClass = 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-800/30'
+            }
+
+            return (
+              <div key={loan.id} className="bg-white dark:bg-paper-200 p-4 rounded-2xl border border-paper-100 dark:border-paper-300/50 shadow-sm relative overflow-hidden group">
+                <div className="relative z-10">
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <h3 className="font-bold text-gray-900 dark:text-white text-base truncate pr-2 flex items-center gap-2">
+                        {loan.paid_by || 'Unknown Person'}
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide border ${bgClass}`}>{type}</span>
+                      </h3>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{new Date(loan.date).toLocaleDateString()}</div>
+                    </div>
+                    <div className={`font-bold text-lg whitespace-nowrap ${loan.amount > 0 ? 'text-green-600 dark:text-green-400' : 'text-orange-600 dark:text-orange-400'}`}>
+                      Rs.{Math.abs(loan.amount || 0).toLocaleString()}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 mb-3">
+                    <span className="text-[10px] text-gray-400 dark:text-gray-500 flex items-center gap-1">
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                      Added by: {(() => {
+                        const userId = loan.user_id
+                        if (userId && userProfiles[userId]) {
+                          const profile = userProfiles[userId]
+                          return profile.full_name || profile.email?.split('@')[0] || 'Unknown'
+                        }
+                        return loan.added_by || loan.user_name || 'Unknown'
+                      })()}
+                    </span>
+                  </div>
+
+                  {loan.remarks && (
+                    <div className="text-sm text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-paper-300/30 p-2.5 rounded-xl border border-gray-100 dark:border-paper-300 mb-3 truncate">
+                      {loan.remarks}
+                    </div>
+                  )}
+
+                  <div className="flex justify-end gap-2 pt-3 border-t border-paper-100 dark:border-paper-300/50">
+                    <button onClick={() => handleEdit(loan)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-lg transition-colors">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                      Edit
+                    </button>
+                    <button onClick={() => setItemToDelete(loan)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg transition-colors">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )
+          })
+        )}
+      </div>
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmationModal
+        isOpen={!!itemToDelete}
+        title="Delete loan record?"
+        itemName={itemToDelete?.paid_by || 'Unknown Person'}
+        description={`Are you sure you want to delete this loan record of Rs. ${Math.abs(itemToDelete?.amount || 0)}?`}
+        onConfirm={() => handleDelete(itemToDelete.id)}
+        onCancel={() => setItemToDelete(null)}
+      />
+
       {/* Edit Modal */}
-      {showEditModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowEditModal(false)}>
-          <div className="bg-white dark:bg-paper-100 rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center">
-              <h3 className="text-lg font-bold text-ink-900">Edit Loan</h3>
-              <button onClick={() => setShowEditModal(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+      {showEditModal && createPortal(
+        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-end sm:justify-center p-0 lg:p-4 animate-fade-in">
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/40 dark:bg-black/60 backdrop-blur-sm" onClick={() => setShowEditModal(false)} />
+
+          {/* Modal Content */}
+          <div className="relative w-full lg:max-w-md bg-white dark:bg-[#1a1a1a] rounded-t-3xl lg:rounded-3xl shadow-2xl overflow-hidden animate-slide-up lg:animate-scale-in flex flex-col max-h-[90vh]">
+            <div className="p-4 border-b border-gray-100 dark:border-white/5 flex justify-between items-center bg-white dark:bg-[#1a1a1a] sticky top-0 z-10">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Edit Loan</h3>
+              <button onClick={() => setShowEditModal(false)} className="p-2 rounded-full text-gray-500 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
 
-            <div className="space-y-4">
+            <div className="p-5 overflow-y-auto space-y-4">
               <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Date</label>
-                <input
-                  type="date"
-                  value={editForm.date || ''}
-                  onChange={(e) => setEditForm({ ...editForm, date: e.target.value })}
-                  className="w-full px-4 py-2.5 text-sm bg-paper-50 dark:bg-paper-200 border border-paper-200 dark:border-paper-300 rounded-xl focus:ring-2 focus:ring-black/5 dark:focus:ring-white/10 outline-none text-ink-900"
-                />
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider">Date</label>
+                <input type="date" value={editForm.date || ''} onChange={(e) => setEditForm({ ...editForm, date: e.target.value })} className="w-full px-4 py-3 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm text-gray-900 dark:text-white" />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Amount (Rs.)</label>
-                <input
-                  type="number"
-                  value={Math.abs(editForm.amount || 0)}
-                  onChange={(e) => setEditForm({ ...editForm, amount: editForm.amount > 0 ? Math.abs(e.target.value) : -Math.abs(e.target.value) })}
-                  className="w-full px-4 py-2.5 text-sm bg-paper-50 dark:bg-paper-200 border border-paper-200 dark:border-paper-300 rounded-xl focus:ring-2 focus:ring-black/5 dark:focus:ring-white/10 outline-none text-ink-900"
-                />
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider">Amount</label>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 font-medium">Rs.</span>
+                  <input type="number" value={Math.abs(editForm.amount || 0)} onChange={(e) => setEditForm({ ...editForm, amount: editForm.amount > 0 ? Math.abs(e.target.value) : -Math.abs(e.target.value) })} className="w-full pl-10 pr-4 py-3 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm font-medium text-gray-900 dark:text-white" placeholder="0" />
+                </div>
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Person</label>
-                <input
-                  type="text"
-                  value={editForm.paid_by || ''}
-                  onChange={(e) => setEditForm({ ...editForm, paid_by: e.target.value })}
-                  className="w-full px-4 py-2.5 text-sm bg-paper-50 dark:bg-paper-200 border border-paper-200 dark:border-paper-300 rounded-xl focus:ring-2 focus:ring-black/5 dark:focus:ring-white/10 outline-none text-ink-900"
-                  placeholder="Person name"
-                />
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider">Person Name</label>
+                <input type="text" value={editForm.paid_by || ''} onChange={(e) => setEditForm({ ...editForm, paid_by: e.target.value })} className="w-full px-4 py-3 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm text-gray-900 dark:text-white" placeholder="Person name" />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Remarks</label>
-                <textarea
-                  value={editForm.remarks || ''}
-                  onChange={(e) => setEditForm({ ...editForm, remarks: e.target.value })}
-                  className="w-full px-4 py-2.5 text-sm bg-paper-50 dark:bg-paper-200 border border-paper-200 dark:border-paper-300 rounded-xl focus:ring-2 focus:ring-black/5 dark:focus:ring-white/10 outline-none resize-none text-ink-900"
-                  rows={3}
-                  placeholder="Add notes..."
-                />
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider">Remarks <span className="text-gray-400 dark:text-gray-600 font-normal lowercase">(Optional)</span></label>
+                <textarea value={editForm.remarks || ''} onChange={(e) => setEditForm({ ...editForm, remarks: e.target.value })} className="w-full px-4 py-3 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm text-gray-900 dark:text-white resize-none" placeholder="Add any notes..." rows={3} />
               </div>
             </div>
 
-            <div className="flex gap-3 pt-2">
-              <button
-                onClick={() => setShowEditModal(false)}
-                className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-paper-100 dark:bg-paper-300 rounded-xl hover:bg-paper-200 dark:hover:bg-paper-400 transition-colors"
-              >
+            <div className="p-4 border-t border-gray-100 dark:border-white/5 bg-white dark:bg-[#1a1a1a] sticky bottom-0 z-10 flex gap-3">
+              <button onClick={() => setShowEditModal(false)} className="flex-1 py-3 px-4 rounded-xl text-sm font-semibold text-gray-700 dark:text-white bg-gray-100 dark:bg-[#333333] hover:bg-gray-200 dark:hover:bg-[#444444] transition-all active:scale-95">
                 Cancel
               </button>
-              <button
-                onClick={handleSave}
-                className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-black dark:bg-white dark:text-black rounded-xl hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors"
-              >
+              <button onClick={handleSave} className="flex-1 py-3 px-4 rounded-xl text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 transition-all shadow-sm shadow-blue-500/20 active:scale-95">
                 Save Changes
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
