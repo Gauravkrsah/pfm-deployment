@@ -7,13 +7,15 @@
  */
 
 /**
- * 1. Future Expense Prediction (Simple Linear Regression)
- * Predicts next month's total spending based on the previous months/days.
- * Formula: y = mx + b
+ * 1. Future Expense Prediction (Linear Regression with outlier removal)
+ * Predicts next month's total spending from historical daily data.
+ * Outlier days (e.g. a one-off Rs.500k purchase) are excluded before
+ * fitting the regression line so they don't skew the forecast.
  */
 export function predictFutureExpenses(data) {
   if (!data || data.length < 2) return null;
-  // group data by day
+
+  // Group raw transactions into daily totals (expenses only)
   const dailyTotals = {};
   data.forEach(item => {
     if (item.amount > 0 && item.category !== 'income' && item.category !== 'loan') {
@@ -25,40 +27,76 @@ export function predictFutureExpenses(data) {
   const sortedDates = Object.keys(dailyTotals).sort();
   if (sortedDates.length < 2) return null;
 
-  let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
-  const n = sortedDates.length;
-  
   const baseDate = new Date(sortedDates[0]).getTime();
-  const days = sortedDates.map(date => {
-      const d = (new Date(date).getTime() - baseDate) / (1000 * 3600 * 24);
-      return { x: d, y: dailyTotals[date] };
+  const allDays = sortedDates.map(date => {
+    const d = (new Date(date).getTime() - baseDate) / (1000 * 3600 * 24);
+    return { x: d, y: dailyTotals[date] };
   });
 
-  days.forEach(point => {
-    sumX += point.x;
-    sumY += point.y;
-    sumXY += point.x * point.y;
-    sumX2 += point.x * point.x;
+  // --- Outlier removal ---
+  // A single large one-off expense (e.g. Rs.501k transport bill) on one day
+  // can make the regression slope huge and inflate the 30-day prediction wildly.
+  // We remove days where daily spend > 3× the median before fitting the line.
+  const sortedYValues = allDays.map(d => d.y).sort((a, b) => a - b);
+  const mid = Math.floor(sortedYValues.length / 2);
+  const median = sortedYValues.length % 2 !== 0
+    ? sortedYValues[mid]
+    : (sortedYValues[mid - 1] + sortedYValues[mid]) / 2;
+
+  const cleanDays = allDays.filter(d => d.y <= median * 3);
+  // If too many points were stripped, fall back to all data
+  const regressionDays = cleanDays.length >= 2 ? cleanDays : allDays;
+
+  let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+  const n = regressionDays.length;
+  regressionDays.forEach(p => {
+    sumX += p.x;
+    sumY += p.y;
+    sumXY += p.x * p.y;
+    sumX2 += p.x * p.x;
   });
+
+  const avgDailyClean = sumY / n;
+  const totalDays = allDays.length;
+  const confidence = totalDays >= 30 ? 'high' : totalDays >= 10 ? 'medium' : 'low';
 
   const denominator = (n * sumX2 - sumX * sumX);
-  if (denominator === 0) return { trend: 'stable', predictedNextMonth: sumY / n * 30 };
+  if (denominator === 0) {
+    const simple = Math.round(avgDailyClean * 30);
+    return {
+      trend: 'stable', predictedNextMonth: simple,
+      avgDailySpend: Math.round(avgDailyClean),
+      daysOfData: totalDays, confidence, changePercent: 0
+    };
+  }
 
   const m = (n * sumXY - sumX * sumY) / denominator;
   const b = (sumY - m * sumX) / n;
 
-  // predict for next 30 days
-  const lastX = days[days.length - 1].x;
+  // Sum up the regression prediction for the next 30 days
+  const lastX = regressionDays[regressionDays.length - 1].x;
   let predictedSum = 0;
   for (let i = 1; i <= 30; i++) {
-    const projectedDayY = m * (lastX + i) + b;
-    predictedSum += Math.max(0, projectedDayY); // no negative spending
+    predictedSum += Math.max(0, m * (lastX + i) + b);
   }
+
+  // Safety cap: never predict more than 1.5× the simple 30-day average.
+  // Even a legitimate upward trend should stay grounded in actual spending.
+  const simpleProjection = avgDailyClean * 30;
+  const cappedPrediction = Math.min(predictedSum, simpleProjection * 1.5);
+
+  const changePercent = avgDailyClean > 0
+    ? Math.round(((cappedPrediction / 30 - avgDailyClean) / avgDailyClean) * 100)
+    : 0;
 
   return {
     m, b,
     trend: m > 0 ? 'increasing' : 'decreasing',
-    predictedNextMonth: Math.round(predictedSum)
+    predictedNextMonth: Math.round(cappedPrediction),
+    avgDailySpend: Math.round(avgDailyClean),
+    daysOfData: totalDays,
+    confidence,
+    changePercent
   };
 }
 

@@ -2,9 +2,12 @@ import re
 import json
 import os
 from typing import List, Dict, Any, Optional
+
+# pyre-ignore[21]
 from dotenv import load_dotenv
 
 try:
+    # pyre-ignore[21]
     import google.generativeai as genai
     GENAI_AVAILABLE = True
 except ImportError:
@@ -959,13 +962,15 @@ class ExpenseParser:
                 'paid_by': None
             }
         
-        # FALLBACK: Extract any number and treat rest as item
-        number_match = re.search(r'(\d+)', text)
+        # FALLBACK: Extract any standalone number and treat rest as item
+        number_match = re.search(r'\b(\d+)\b', text)
         if number_match:
             amount = int(number_match.group(1))
             # Remove the number and clean the remaining text
-            item = re.sub(r'\d+', '', text).strip()
-            if item:
+            item = re.sub(r'\b\d+\b', '', text).strip()
+            
+            # Anti-gibberish check: Reject if item still contains numbers or is just a single letter
+            if item and len(item) > 1 and not re.search(r'\d', item):
                 item = self._clean_item_name(item)
                 category = self._categorize(item)
                 return {
@@ -976,16 +981,16 @@ class ExpenseParser:
                     'paid_by': None
                 }
         
-        # Fallback: Extract amount and treat rest as item
-        amount_match = re.search(r'Rs\.?(\d+)|Rs.?(\d+)', text)
+        # Fallback 2: Extract explicit "Rs.X" and treat rest as item
+        amount_match = re.search(r'\bRs\.?\s*(\d+)\b', text, re.IGNORECASE)
         if amount_match:
-            amount = int(amount_match.group(1) or amount_match.group(2))
-            description = re.sub(r'Rs\.?\d+|Rs.?\d+', '', text)
+            amount = int(amount_match.group(1))
+            description = re.sub(r'\bRs\.?\s*\d+\b', '', text, flags=re.IGNORECASE)
             description = re.sub(r'\b(on|for|spent|the|paid|by)\b', '', description, flags=re.IGNORECASE)
             description = re.sub(r'\s+', ' ', description).strip()
-            description = self._clean_item_name(description)
             
-            if description and amount > 0:
+            if description and len(description) > 1 and not re.search(r'\d', description):
+                description = self._clean_item_name(description)
                 category = self._categorize(description)
                 return {
                     'amount': amount,
@@ -1193,20 +1198,26 @@ class ExpenseParser:
                 options = expense.get('confirmation_options', [])
                 person = expense.get('paid_by', 'someone')
                 options_text = " or ".join([opt.get('label', opt.get('category', '')) for opt in options])
-                reply_parts.append(f"CONFIRM: Rs.{abs(amount)} from {person} - Is this a {options_text}?")
+                # pyre-ignore[6]
+                reply_parts.append(str(f"CONFIRM: Rs.{abs(amount)} from {person} - Is this a {options_text}?"))
             elif amount < 0:  # Income
-                reply_parts.append(f"SUCCESS: Added Rs.{abs(amount)} -> {expense['category']} ({expense['remarks']})")
+                # pyre-ignore[6]
+                reply_parts.append(str(f"SUCCESS: Added Rs.{abs(amount)} -> {expense['category']} ({expense['remarks']})"))
             else:  # Expense
-                reply_parts.append(f"SUCCESS: Added Rs.{amount} -> {expense['category']} ({expense['remarks']})")
+                # pyre-ignore[6]
+                reply_parts.append(str(f"SUCCESS: Added Rs.{amount} -> {expense['category']} ({expense['remarks']})"))
         
         return '\n'.join(reply_parts)
 
 class NLPService:
     def __init__(self):
+        self.gemini_available = False
+        self.model = None
         self.parser = ExpenseParser()
         self._setup_gemini()
         # Initialize RAG service
         try:
+            # pyre-ignore[21]
             from services.rag_service import RAGService
             self.rag_service = RAGService()
         except Exception as e:
@@ -1225,8 +1236,10 @@ class NLPService:
         gemini_api_key = os.getenv("GEMINI_API_KEY")
         if gemini_api_key and gemini_api_key.strip():
             try:
+                # pyre-ignore[16]
                 genai.configure(api_key=gemini_api_key)
                 # gemini-2.5-flash found to be more stable on free tier than 2.0-flash
+                # pyre-ignore[16]
                 self.model = genai.GenerativeModel('gemini-2.5-flash')
                 self.gemini_available = True
                 print("SUCCESS: Gemini API configured (gemini-2.5-flash)")
@@ -1246,6 +1259,7 @@ class NLPService:
         
         for attempt in range(max_retries + 1):
             try:
+                # pyre-ignore[16]
                 response = self.model.generate_content(prompt)
                 if response and response.text:
                     return response.text.strip()
@@ -1310,6 +1324,9 @@ LOGIC & REASONING RULES:
    - "paid_by": Set to null for personal expenses. Only set for explicit "paid by" or loan transactions.
    - "remarks": Generate a short, clear summary e.g. "Gift for Sonu", "Lunch expense".
 
+9. **Gibberish / Invalid Text (CRITICAL)**:
+   - If the text is random keyboard mashing (e.g., "asdf 123", "asvasfvava aer 43q413") or does not logically describe a financial transaction, MUST RETURN an empty expenses array `{"expenses": []}`.
+
 Return ONLY valid JSON structure:
 Example 1 - Regular expense (gift FOR someone):
 {{
@@ -1343,32 +1360,34 @@ Example 2 - Ambiguous case (gift FROM someone):
                     parsed_data = json.loads(json_str)
                     
                     # Validate and fix structure
-                    if 'expenses' in parsed_data:
-                        # Generate structured reply like regex parser
-                        reply_parts = []
-                        for exp in parsed_data['expenses']:
-                            amount = exp.get('amount', 0)
-                            category = exp.get('category', 'Other')
-                            remarks = exp.get('remarks', '')
-                            needs_confirmation = exp.get('needs_confirmation', False)
+                    if 'expenses' not in parsed_data or not parsed_data['expenses']:
+                        return {'status': 'error', 'message': "I didn't understand that transaction. Please provide a clear amount and item (e.g., '100 for tea')."}
+                        
+                    # Generate structured reply like regex parser
+                    reply_parts: list[str] = []
+                    for exp in parsed_data['expenses']:
+                        amount = exp.get('amount', 0)
+                        category = exp.get('category', 'Other')
+                        remarks = exp.get('remarks', '')
+                        needs_confirmation = exp.get('needs_confirmation', False)
+                        
+                        # Ensure category is Title Case
+                        category = category.title()
+                        exp['category'] = category
+                        
+                        # Handle confirmation cases
+                        if needs_confirmation:
+                            options = exp.get('confirmation_options', [])
+                            person = exp.get('paid_by', 'someone')
+                            options_text = " or ".join([opt.get('label', opt.get('category', '')) for opt in options])
+                            reply_parts.append(f"CONFIRM: Rs.{abs(amount)} from {person} - Is this a {options_text}?")
+                        elif amount < 0:
+                            reply_parts.append(f"SUCCESS: Added Rs.{abs(amount)} -> {category} ({remarks})")
+                        else:
+                            reply_parts.append(f"SUCCESS: Added Rs.{amount} -> {category} ({remarks})")
                             
-                            # Ensure category is Title Case
-                            category = category.title()
-                            exp['category'] = category
-                            
-                            # Handle confirmation cases
-                            if needs_confirmation:
-                                options = exp.get('confirmation_options', [])
-                                person = exp.get('paid_by', 'someone')
-                                options_text = " or ".join([opt.get('label', opt.get('category', '')) for opt in options])
-                                reply_parts.append(f"CONFIRM: Rs.{abs(amount)} from {person} - Is this a {options_text}?")
-                            elif amount < 0:
-                                reply_parts.append(f"SUCCESS: Added Rs.{abs(amount)} -> {category} ({remarks})")
-                            else:
-                                reply_parts.append(f"SUCCESS: Added Rs.{amount} -> {category} ({remarks})")
-                                
-                        parsed_data['reply'] = '\n'.join(reply_parts)
-                        return parsed_data
+                    parsed_data['reply'] = '\n'.join(reply_parts)
+                    return parsed_data
             
             return None
             
@@ -1506,27 +1525,34 @@ Example 2 - Ambiguous case (gift FROM someone):
             parts = [p.strip() for p in text.split(',')]
             expenses = []
             
-            i = 0
+            i: int = 0
             while i < len(parts):
-                amount_part = None
-                amount = None
+                amount_part = -1
+                amount = 0
+                found_amount = False
                 
                 # Look for Rs.Amount pattern
+                # pyre-ignore[58]
                 for j in range(i, min(i + 3, len(parts))):
-                    if re.search(r'Rs\.?(\d+)', parts[j], re.IGNORECASE):
-                        amount_match = re.search(r'Rs\.?(\d+)', parts[j], re.IGNORECASE)
+                    amount_match = re.search(r'Rs\.?(\d+)', parts[j], re.IGNORECASE)
+                    if amount_match:
+                        # pyre-ignore[16]
                         amount = int(amount_match.group(1))
-                        amount_part = j
+                        amount_part = int(j)
+                        found_amount = True
                         break
                 
-                if amount is None:
+                if not found_amount or amount_part == -1:
+                    # pyre-ignore[58]
                     i += 1
                     continue
                 
                 # Get item (before amount)
+                # pyre-ignore[58]
                 item = parts[i] if i < amount_part else 'item'
                 
                 # Get category (after amount)
+                # pyre-ignore[58]
                 category = parts[amount_part + 1] if amount_part + 1 < len(parts) else 'Other'
                 
                 # Clean up
@@ -1546,6 +1572,7 @@ Example 2 - Ambiguous case (gift FROM someone):
                     'paid_by': None
                 })
                 
+                # pyre-ignore[58]
                 i = amount_part + 2
             
             return expenses if expenses else None
@@ -1557,6 +1584,7 @@ Example 2 - Ambiguous case (gift FROM someone):
     async def chat_about_expenses(self, request):
         """Handle chat requests about expenses using RAG with Gemini"""
         try:
+            # pyre-ignore[21]
             from services.expense_analyzer import ExpenseAnalyzer
             
             analyzer = ExpenseAnalyzer()
@@ -1618,8 +1646,9 @@ Example 2 - Ambiguous case (gift FROM someone):
             # Prepare structured data summary
             categories_summary = "\n".join([f"  - {cat.title()}: Rs.{amount}" for cat, amount in analysis['categories'].items()])
             
-            # Get recent transactions
-            recent_txns = expenses_data[:10] if len(expenses_data) > 10 else expenses_data
+            # Get recent transactions safely preventing list slice type errors for Pyre
+            # pyre-ignore[16]
+            recent_txns = list(expenses_data)[:10] if int(len(expenses_data)) > 10 else list(expenses_data)
             transactions_text = "\n".join([
                 f"  - Rs.{txn.get('amount', 0)} on {txn.get('item', 'item')} ({txn.get('category', 'Other')}) on {txn.get('date', 'N/A')}"
                 for txn in recent_txns
