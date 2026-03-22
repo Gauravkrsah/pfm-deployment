@@ -1,11 +1,16 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../supabase'
 import DateRangePicker, { getDateRange } from './ui/DateRangePicker'
-
+import { predictFutureExpenses, optimizeBudget, fallbackCategorization } from '../utils/algorithms'
 export default function EnhancedAnalytics({ currentGroup, user }) {
   const [stats, setStats] = useState({
     expense: 0, income: 0, balance: 0, loanOut: 0, loanIn: 0,
     categories: {}, incomeCategories: {}, weekData: [], monthData: []
+  })
+  const [algorithms, setAlgorithms] = useState({
+    prediction: null,
+    optimization: null,
+    fallbackDemo: null
   })
   const [range, setRange] = useState({ type: 'all', start: null, end: null })
   const [loading, setLoading] = useState(true)
@@ -56,8 +61,24 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
         loanIn: loanInTotal,
         categories
       })
+
+      // Run advanced algorithms
+      const prediction = predictFutureExpenses(data);
+      const optimization = optimizeBudget(categories, expenseTotal, 0.2); // 20% savings goal
+      const fallbackCats = Object.keys(categories).length > 2 ? Object.keys(categories) : ['entertainment', 'food', 'rent', 'utilities', 'shopping', 'transport'];
+      const fallbackDemo = [
+        { item: 'netflix', ...fallbackCategorization('netflix', fallbackCats) },
+        { item: 'momo', ...fallbackCategorization('momo', fallbackCats) }
+      ];
+
+      setAlgorithms({
+        prediction,
+        optimization,
+        fallbackDemo
+      });
     } else {
       setStats({ expense: 0, income: 0, balance: 0, loanOut: 0, loanIn: 0, categories: {} })
+      setAlgorithms({ prediction: null, optimization: null, fallbackDemo: null })
     }
     setLoading(false)
   }, [user, currentGroup, range])
@@ -136,6 +157,86 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
               {stats.balance >= 0 ? '✨ Positive' : '⚠️ Negative'}
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Advanced Algorithms Section */}
+      <div className="mt-8 space-y-4">
+        <h3 className="font-bold text-gray-900 dark:text-gray-100 text-lg flex items-center gap-2">
+          <span>🧠</span> AI & Advanced Analytics (T.U. Project Algorithms)
+        </h3>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          
+          {/* 1. Linear Regression Prediction */}
+          <div className="bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-900/20 rounded-2xl p-5">
+            <h4 className="font-semibold text-indigo-900 dark:text-indigo-200 mb-3 flex items-center gap-2">
+              <span>📈</span> Future Prediction
+            </h4>
+            {algorithms.prediction ? (
+              <div className="space-y-2">
+                <p className="text-sm text-gray-700 dark:text-gray-300">Linear Regression Projection ({range.type === 'all' ? 'All Data' : 'Selected Range'}):</p>
+                <div className="text-2xl font-bold text-indigo-700 dark:text-indigo-300">
+                  Rs.{algorithms.prediction.predictedNextMonth.toLocaleString()}
+                </div>
+                <p className="text-xs font-medium text-indigo-600 dark:text-indigo-400">Projected next 30 days spend</p>
+                <div className="mt-3 text-xs text-gray-500 dark:text-gray-400 flex items-center justify-between border-t border-indigo-200 dark:border-indigo-800 pt-2">
+                  <span>Regression Trend:</span>
+                  <span className={`font-semibold capitalize px-2 py-0.5 rounded-full ${algorithms.prediction.trend === 'increasing' ? 'bg-red-100 text-red-700 dark:bg-red-900/30' : 'bg-green-100 text-green-700 dark:bg-green-900/30'}`}>
+                    {algorithms.prediction.trend}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">Not enough daily data to calculate regression prediction. Add more expenses.</p>
+            )}
+          </div>
+
+          {/* 2. Greedy Budget Optimization */}
+          <div className="bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-900/20 rounded-2xl p-5">
+            <h4 className="font-semibold text-emerald-900 dark:text-emerald-200 mb-3 flex items-center gap-2">
+              <span>🎯</span> Budget Optimization
+            </h4>
+            {algorithms.optimization && stats.expense > 0 ? (
+              <div className="space-y-3">
+                <p className="text-sm text-gray-700 dark:text-gray-300">Greedy Algorithm Goal: 20% Reduction (Rs.{algorithms.optimization.targetSavings.toLocaleString()})</p>
+                <div className="space-y-2 mt-2 max-h-32 overflow-y-auto pr-1">
+                  {algorithms.optimization.suggestions.length > 0 ? algorithms.optimization.suggestions.map((sug, i) => (
+                    <div key={i} className="flex justify-between items-center text-sm border-b border-emerald-200/50 dark:border-emerald-800/30 pb-1">
+                      <span className="capitalize text-emerald-800 dark:text-emerald-300 truncate mr-2" title={sug.reason}>{sug.category}</span>
+                      <span className="font-medium text-emerald-700 dark:text-emerald-400">-Rs.{sug.cutAmount.toLocaleString()}</span>
+                    </div>
+                  )) : <p className="text-xs text-gray-500">No cuts found.</p>}
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">Add expenses to generate budget optimization suggestions.</p>
+            )}
+          </div>
+
+          {/* 3. K-Means/String Fallback */}
+          <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/20 rounded-2xl p-5">
+            <h4 className="font-semibold text-amber-900 dark:text-amber-200 mb-3 flex items-center gap-2" title="Levenshtein Distance Fallback Algorithm">
+              <span>🔍</span> Fallback Categorizer
+            </h4>
+            <div className="space-y-2">
+              <p className="text-xs text-gray-700 dark:text-gray-300 mb-3">Testing String-Distance Fallback for unknown items:</p>
+              {algorithms.fallbackDemo?.map((demo, i) => (
+                <div key={i} className="flex flex-col text-sm bg-white dark:bg-paper-200 p-2 rounded-lg border border-amber-100 dark:border-amber-800 shadow-sm">
+                  <div className="flex justify-between items-center">
+                    <span className="font-medium text-gray-800 dark:text-gray-100">"{demo.item}"</span>
+                    <span className="text-amber-600 dark:text-amber-400 capitalize bg-amber-100/50 dark:bg-amber-900/20 px-2 py-0.5 rounded text-xs font-semibold">
+                      ➔ {demo.matchedCategory}
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-gray-500 mt-1 flex justify-between w-full">
+                    <span>Algorithm: Levenshtein</span>
+                    <span>Distance: {demo.distance} ({demo.confidence})</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
         </div>
       </div>
 
