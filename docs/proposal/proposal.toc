@@ -1,0 +1,23 @@
+\contentsline {section}{\numberline {1}Introduction}{1}{section.1}%
+\contentsline {section}{\numberline {2}Problem Statement}{2}{section.2}%
+\contentsline {section}{\numberline {3}Objectives}{3}{section.3}%
+\contentsline {section}{\numberline {4}Methodology}{4}{section.4}%
+\contentsline {subsection}{\numberline {4.1}Requirement Identification}{4}{subsection.4.1}%
+\contentsline {subsubsection}{\numberline {4.1.1}Study of Existing System}{4}{subsubsection.4.1.1}%
+\contentsline {subsubsection}{\numberline {4.1.2}Literature Review}{4}{subsubsection.4.1.2}%
+\contentsline {subsubsection}{\numberline {4.1.3}Requirement Analysis}{5}{subsubsection.4.1.3}%
+\contentsline {subsection}{\numberline {4.2}Feasibility Study}{6}{subsection.4.2}%
+\contentsline {subsubsection}{\numberline {4.2.1}Technical Feasibility}{6}{subsubsection.4.2.1}%
+\contentsline {subsubsection}{\numberline {4.2.2}Operational Feasibility}{6}{subsubsection.4.2.2}%
+\contentsline {subsubsection}{\numberline {4.2.3}Economic Feasibility}{7}{subsubsection.4.2.3}%
+\contentsline {subsection}{\numberline {4.3}Algorithm Design Plan}{7}{subsection.4.3}%
+\contentsline {subsubsection}{\numberline {4.3.1}Text Preprocessing (Supporting Module)}{7}{subsubsection.4.3.1}%
+\contentsline {subsubsection}{\numberline {4.3.2}TF-IDF Vectorization (Supporting Module)}{8}{subsubsection.4.3.2}%
+\contentsline {subsubsection}{\numberline {4.3.3}Multinomial Naive Bayes Classifier (Primary NLP Algorithm)}{8}{subsubsection.4.3.3}%
+\contentsline {subsubsection}{\numberline {4.3.4}Confidence-Gated Gemini API Fallback (Integration Module)}{9}{subsubsection.4.3.4}%
+\contentsline {subsubsection}{\numberline {4.3.5}Greedy Budget Optimizer (Core Algorithm)}{9}{subsubsection.4.3.5}%
+\contentsline {subsubsection}{\numberline {4.3.6}Linear Regression Forecasting (Secondary Algorithm)}{10}{subsubsection.4.3.6}%
+\contentsline {subsection}{\numberline {4.4}High Level Design of System}{10}{subsection.4.4}%
+\contentsline {section}{\numberline {5}Gantt Chart}{13}{section.5}%
+\contentsline {section}{\numberline {6}Expected Outcome}{14}{section.6}%
+\contentsline {section}{\numberline {7}References}{15}{section.7}%

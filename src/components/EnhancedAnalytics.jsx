@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { supabase } from '../supabase'
 import DateRangePicker, { getDateRange } from './ui/DateRangePicker'
-import { predictFutureExpenses, optimizeBudget } from '../utils/algorithms'
+import { calculateMovingAverage, optimizeBudget } from '../utils/algorithms'
 import { 
-  LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, 
+  ComposedChart, LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, 
   Tooltip as RechartsTooltip, ResponsiveContainer, 
   PieChart, Pie, Cell, 
   BarChart, Bar, Legend
@@ -15,7 +15,7 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
     categories: {}, dailyData: []
   })
   const [algorithms, setAlgorithms] = useState({
-    prediction: null,
+    trends: null,
     optimization: null
   })
   const [range, setRange] = useState({ type: 'all', start: null, end: null })
@@ -78,16 +78,20 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
       })
 
       // Run advanced algorithms
-      const prediction = predictFutureExpenses(data);
+      const movingAverageData = calculateMovingAverage(data, 7);
+      const avgDailySpend = dailyData.length > 0 ? expenseTotal / dailyData.length : 0;
+      const highestDay = dailyData.length > 0 ? Math.max(...dailyData.map(d => d.amount)) : 0;
+      
+      const trends = { movingAverageData, avgDailySpend, highestDay };
       const optimization = optimizeBudget(categories, expenseTotal, savingsGoal / 100);
 
       setAlgorithms({
-        prediction,
+        trends,
         optimization
       });
     } else {
       setStats({ expense: 0, income: 0, balance: 0, loanOut: 0, loanIn: 0, categories: {}, dailyData: [] })
-      setAlgorithms({ prediction: null, optimization: null })
+      setAlgorithms({ trends: null, optimization: null })
     }
     setLoading(false)
   }, [user, currentGroup, range, savingsGoal])
@@ -125,18 +129,15 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
     { name: 'Balance', value: stats.balance > 0 ? stats.balance : 0, fill: '#10b981' },
   ];
 
-  const forecastExplainer = useMemo(() => {
-    if (!algorithms.prediction) return "Log a few more daily expenses to unlock your 30-day forecast.";
-    const { predictedNextMonth, trend, changePercent } = algorithms.prediction;
-    const deficit = predictedNextMonth - stats.income;
-    const sign = changePercent > 0 ? '+' : '';
+  const trendsExplainer = useMemo(() => {
+    if (!algorithms.trends || algorithms.trends.movingAverageData.length === 0) return "Add more daily expenses to see your spending trends and moving averages.";
+    const { avgDailySpend, highestDay } = algorithms.trends;
     
-    if (stats.income === 0) return `You're on track to spend about Rs.${predictedNextMonth.toLocaleString()} next month. Since you haven't logged any income yet, this will come straight out of your savings.`;
-    
-    if (deficit > 0) return `Your spending is trending ${trend} (${sign}${changePercent}%), which means you'll likely hit Rs.${predictedNextMonth.toLocaleString()} next month. That's Rs.${deficit.toLocaleString()} more than you earn. You might want to slow down.`;
-    
-    return `Your spending is trending ${trend}. Based on recent habits, expect to spend around Rs.${predictedNextMonth.toLocaleString()} next month, which safely leaves you with Rs.${Math.abs(deficit).toLocaleString()} left over.`;
-  }, [algorithms.prediction, stats.income]);
+    if (highestDay > avgDailySpend * 3 && avgDailySpend > 0) {
+      return `Your average daily spend is Rs.${Math.round(avgDailySpend).toLocaleString()}, but you have significant outliers (like a peak of Rs.${Math.round(highestDay).toLocaleString()}). The moving average line on the graph will help you see your underlying trend despite these spikes.`;
+    }
+    return `Your average daily spend is Rs.${Math.round(avgDailySpend).toLocaleString()}. The moving average line on the graph smooths out daily variations to show your true spending trajectory.`;
+  }, [algorithms.trends]);
 
   const optimizerExplainer = useMemo(() => {
     if (!algorithms.optimization || stats.expense === 0) return "Categorize your expenses so we can spot places where you can save.";
@@ -268,60 +269,48 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
         </div>
       </div>
 
-      {/* Advanced Analytics - Spending Forecast Row */}
+      {/* Advanced Analytics - Daily Spending Trends Row */}
       <div className="bg-white dark:bg-paper-100 border border-paper-200/60 dark:border-paper-300/50 rounded-2xl p-6 shadow-sm overflow-hidden">
         <div className="flex flex-col lg:flex-row gap-8">
           
           <div className="lg:w-1/3 flex flex-col gap-4">
             <h4 className="font-bold text-xl text-indigo-900 dark:text-indigo-100 flex items-center gap-2">
               <span className="p-2 bg-indigo-50 dark:bg-indigo-900/30 rounded-xl text-indigo-600 dark:text-indigo-400">📈</span>
-              Spending Forecast
+              Daily Spending Trends
             </h4>
             <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
-              {forecastExplainer}
+              {trendsExplainer}
             </p>
 
-            {algorithms.prediction ? (() => {
-               const { predictedNextMonth, avgDailySpend, trend, changePercent, confidence, daysOfData } = algorithms.prediction;
-               const willExceedIncome = stats.income > 0 && predictedNextMonth > stats.income;
-               return (
+            {algorithms.trends && algorithms.trends.movingAverageData.length > 0 ? (
                  <div className="mt-2 flex flex-col gap-4">
                    <div className="bg-indigo-50 dark:bg-indigo-900/10 rounded-xl p-5 border border-indigo-100 dark:border-indigo-800/30">
-                     <div className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 mb-2 uppercase tracking-wide">Predicted 30-Day Spend</div>
-                     <div className="text-4xl font-extrabold text-indigo-700 dark:text-indigo-300 mb-2">
-                       Rs.{predictedNextMonth.toLocaleString()}
+                     <div className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 mb-2 uppercase tracking-wide">Average Daily Spend</div>
+                     <div className="flex items-baseline gap-1 break-words">
+                       <span className="text-sm font-semibold text-indigo-700 dark:text-indigo-300">Rs.</span>
+                       <span className="text-3xl font-extrabold text-indigo-700 dark:text-indigo-300">
+                         {Math.round(algorithms.trends.avgDailySpend).toLocaleString()}
+                       </span>
                      </div>
-                     <div className="text-sm text-indigo-800/80 dark:text-indigo-200/80">Average Rs.{avgDailySpend.toLocaleString()} per day</div>
                    </div>
 
-                   <div className={`rounded-xl p-4 border text-sm ${willExceedIncome ? 'bg-red-50 dark:bg-red-900/10 border-red-200 text-red-800 dark:text-red-200' : 'bg-green-50 dark:bg-green-900/10 border-green-200 text-green-800 dark:text-green-200'}`}>
-                     <div className="font-bold mb-2">What this means:</div>
-                     <ul className="space-y-1.5 list-disc list-inside opacity-90 text-xs">
-                        {willExceedIncome ? (
-                          <>
-                           <li>Your predicted spend of Rs.{predictedNextMonth.toLocaleString()} exceeds your current income.</li>
-                           <li>Action is needed to reduce your daily expenses.</li>
-                          </>
-                        ) : (
-                          <>
-                           <li>Your spending is within a safe margin compared to your income.</li>
-                           <li>Spending trend is {trend} {changePercent !== 0 ? `(${changePercent > 0 ? '+' : ''}${changePercent}%)` : ''}.</li>
-                          </>
-                        )}
-                     </ul>
+                   <div className="rounded-xl p-4 border text-sm bg-orange-50 dark:bg-orange-900/10 border-orange-200 text-orange-800 dark:text-orange-200">
+                     <div className="font-bold mb-1 border-b border-orange-200/50 pb-2">Highest Spend Day</div>
+                     <div className="text-2xl font-bold mt-2 break-words">
+                       Rs.{Math.round(algorithms.trends.highestDay).toLocaleString()}
+                     </div>
                    </div>
                  </div>
-               )
-            })() : (
-               <div className="text-sm text-gray-500 italic mt-6 bg-gray-50 dark:bg-paper-200/50 p-4 rounded-xl">Not enough daily data to predict trends.</div>
+            ) : (
+               <div className="text-sm text-gray-500 italic mt-6 bg-gray-50 dark:bg-paper-200/50 p-4 rounded-xl">Not enough daily data to calculate trends.</div>
             )}
           </div>
 
           <div className="lg:w-2/3 min-h-[300px] border border-gray-100 dark:border-paper-300 rounded-xl p-4 bg-gray-50/50 dark:bg-paper-200/20">
-            <h5 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4 text-center">Historical Daily Spending</h5>
-            {stats.dailyData.length > 0 ? (
+            <h5 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4 text-center">Historical Daily Spend & Moving Avg (7D)</h5>
+            {algorithms.trends && algorithms.trends.movingAverageData.length > 0 ? (
                <ResponsiveContainer width="100%" height="90%">
-                 <AreaChart data={stats.dailyData}>
+                 <ComposedChart data={algorithms.trends.movingAverageData}>
                    <defs>
                      <linearGradient id="colorAmount" x1="0" y1="0" x2="0" y2="1">
                        <stop offset="5%" stopColor="#6366f1" stopOpacity={0.4}/>
@@ -332,8 +321,9 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                    <XAxis dataKey="date" tick={{fontSize: 10}} tickLine={false} axisLine={false} minTickGap={30} />
                    <YAxis tick={{fontSize: 10}} tickLine={false} axisLine={false} tickFormatter={v => `Rs.${v}`} />
                    <RechartsTooltip content={<CustomTooltip />} />
-                   <Area type="monotone" dataKey="amount" name="Spend" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorAmount)" />
-                 </AreaChart>
+                   <Area type="monotone" dataKey="amount" name="Daily Spend" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorAmount)" />
+                   <Line type="monotone" dataKey="movingAverage" name="7-Day Avg" stroke="#f59e0b" strokeWidth={4} dot={false} strokeDasharray="5 5" />
+                 </ComposedChart>
                </ResponsiveContainer>
             ) : (
                <div className="h-full flex items-center justify-center text-gray-400 text-sm">No timeline data available.</div>

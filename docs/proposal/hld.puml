@@ -1,0 +1,99 @@
+
+@startuml
+
+skinparam shadowing false
+skinparam monochrome true
+skinparam linetype ortho
+skinparam PackageStyle rectangle
+skinparam roundCorner 0
+skinparam nodesep 100
+skinparam ranksep 100
+skinparam defaultFontSize 14
+
+skinparam class {
+    BackgroundColor white
+    ArrowColor black
+    BorderColor black
+}
+
+skinparam component {
+    BackgroundColor white
+    ArrowColor black
+    BorderColor black
+}
+
+skinparam sequence {
+    ArrowColor black
+    LifeLineBorderColor black
+    ParticipantBorderColor black
+    ParticipantBackgroundColor white
+    GroupBodyBackgroundColor transparent
+    GroupHeaderFontSize 14
+}
+
+hide circle
+skinparam linetype ortho
+
+' Presentation Layer (Standalone Boxes)
+class "User Interface (React)" as UI << (P,white) >> {
+    + renderDashboard()
+    + manageExpenses()
+    + handleAIChat()
+    + visualizeAnalytics()
+}
+
+class "Analytical Utilities" as Utils << (U,white) >> {
+    + calculateMovingAverage()
+    + optimizeBudget()
+}
+
+' Logic Layer (Standalone Boxes)
+class "FastAPI Controller" as API << (C,white) >> {
+    + handleWS()
+    + routeAIRequests()
+    + checkHealth()
+}
+
+class "Hybrid NLP Engine" as NLP << (N,white) >> {
+    + parseExpense()
+    + regexMatch()
+    + llmFallback()
+}
+
+class "RAG Service" as RAG << (R,white) >> {
+    + queryHistory()
+    + smartCategorize()
+    + contextAugment()
+}
+
+' Data & External Layer
+class "Supabase DB" as DB << (D,white) >> {
+    + storeTransaction()
+    + userGroups()
+    + persistence()
+}
+
+class "Gemini AI" as LLM << (A,white) >> {
+    + processUnstructured()
+    + generativeResponse()
+}
+
+' Layout positioning (Top to Bottom)
+UI -[hidden]down- API
+API -[hidden]down- DB
+
+' Relationships with Orthogonal Lines
+UI -down-> API : 1. AI & NLP Requests
+Utils -right-> UI : 4. Analytics
+
+API -down-> NLP : 2a. Parse flow
+API -down-> RAG : 2b. Chat flow
+
+NLP -down-> LLM : 2c. AI Fallback
+RAG -down-> LLM : 2d. Context Augment
+API -down-> DB : 3. Storage
+
+' The Direct Connection (Bold/Marked)
+UI -[#black,bold]down-> DB : 5. Direct CRUD (Supabase SDK)
+
+@enduml

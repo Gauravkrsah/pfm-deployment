@@ -1,0 +1,402 @@
+\documentclass[12pt, a4paper]{article}
+
+\usepackage[top=1in, bottom=1in, left=1.25in, right=1in]{geometry}
+\usepackage{mathptmx} % Times New Roman
+\usepackage{setspace}
+\usepackage{titlesec}
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage{float}
+\usepackage{hyperref}
+\usepackage{xurl}
+\usepackage{pgfgantt}
+\usepackage{tocloft}
+\usepackage{parskip}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+
+% TOC dots for all levels
+\renewcommand{\cftsecleader}{\cftdotfill{\cftdotsep}}
+
+% Page number bottom centered
+\usepackage{fancyhdr}
+\fancypagestyle{plain}{
+  \fancyhf{}
+  \renewcommand{\headrulewidth}{0pt}
+  \fancyfoot[C]{\thepage}
+}
+\pagestyle{plain}
+
+% Line spacing globally
+\onehalfspacing
+
+% Headings Configuration
+\titleformat{\section}{\normalfont\fontsize{16}{19.2}\bfseries\selectfont}{\thesection.}{1em}{}
+\titleformat{\subsection}{\normalfont\fontsize{14}{16.8}\bfseries\selectfont}{\thesubsection}{1em}{}
+\titleformat{\subsubsection}{\normalfont\fontsize{12}{14.4}\bfseries\selectfont}{\thesubsubsection}{1em}{}
+
+% Captions Configuration
+\DeclareCaptionFont{twelvept}{\fontsize{12}{14.4}\selectfont}
+\captionsetup[figure]{font={bf,twelvept}, labelsep=colon, justification=centering, position=bottom}
+
+\begin{document}
+\pagenumbering{roman}
+
+% Cover Page
+\begin{titlepage}
+\begin{singlespace}
+\begin{center}
+\vspace*{0.1cm}
+{\fontsize{16}{19.2}\bfseries Kathford International College of Engineering and Management\\}
+\vspace{0.2cm}
+{\fontsize{14}{16.8}\bfseries Balkumari, Lalitpur, Nepal\\}
+
+\vspace{0.5cm}
+\includegraphics[width=4cm]{kathford_logo.jpg}\\
+
+\vspace{0.6cm}
+{\fontsize{14}{16.8}\bfseries A\\}
+\vspace{0.3cm}
+{\fontsize{16}{19.2}\bfseries Project Proposal\\}
+\vspace{0.3cm}
+{\fontsize{14}{16.8}\bfseries on\\}
+\vspace{0.5cm}
+{\fontsize{16}{19.2}\bfseries PERSONAL FINANCE MANAGER (PFM)\\}
+
+\vspace{0.8cm}
+{\fontsize{14}{16.8}\bfseries Submitted To\\}
+\vspace{0.4cm}
+{\fontsize{12}{14.4} Department of Information Technology\\}
+\vspace{0.2cm}
+{\fontsize{12}{14.4} Kathford International College of Engineering and Management\\}
+
+\vspace{1.2cm}
+{\fontsize{12}{14.4}\bfseries In partial fulfillment of the requirement for the Bachelor Degree in Computer Application\\}
+
+\vspace{1.2cm}
+{\fontsize{14}{16.8}\bfseries Submitted By\\}
+\vspace{0.4cm}
+{\fontsize{12}{14.4} Gaurav Kr Sah (6-2-456-112-2021)\\}
+\vspace{0.2cm}
+{\fontsize{12}{14.4} Nirmal Sapkota (6-2-456-123-2021)\\}
+
+\end{center}
+\end{singlespace}
+\end{titlepage}
+
+\newpage
+\renewcommand{\contentsname}{\centerline{\fontsize{16}{19.2}\normalfont\bfseries TABLE OF CONTENTS}}
+\tableofcontents
+\newpage
+
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Introduction}
+Most college students know the frustration of checking their bank balance and wondering where the money went. During the fourth semester, we tried tracking daily expenses in a shared Google spreadsheet. We quit after six days. The issue was not the spreadsheet itself; it was the act of stopping mid-day to open a laptop, navigate to the sheet, and manually fill in a row for every small purchase. That kind of discipline is genuinely hard to sustain.
+
+Existing finance apps do not solve this well. Splitwise, Wallet, and similar tools all share the same problem: they are form-driven. To record a transaction, you tap through menus, pick categories from a list, and enter numbers manually. The interface is cleaner than a spreadsheet, but the underlying friction is identical. People download these apps with good intentions and abandon them within a few weeks.
+
+The Personal Finance Manager (PFM) will take a different approach. Instead of presenting forms, the system will accept plain text. A user will type something like ``paid 500 for lunch'' and the application will handle everything else --- find the amount, figure out the date, assign a category, and store the record.
+
+This project is our final year capstone for the Bachelor of Computer Applications degree at Tribhuvan University. The T.U. guidelines require a system that goes beyond simple database operations and demonstrates working algorithms written by the students themselves. We take that requirement seriously. The core of PFM will be a custom-built NLP text classification pipeline, a greedy algorithm for budget optimization, and a linear regression forecasting module --- all written by us, running on our own server.
+
+\newpage
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Problem Statement}
+The core problem is not a lack of finance applications. There are plenty. The problem is that none of them stay part of a person's daily routine. Three specific issues drive this:
+
+\begin{itemize}
+    \item \textbf{Manual data entry is the breaking point.} Every existing tracker expects the user to explicitly enter amounts, categories, and dates for every purchase. This creates enough friction that most users stop logging transactions after the first few days. The tool that is supposed to solve the problem becomes another thing to maintain.
+
+    \item \textbf{Category rules are too rigid.} Apps that classify transactions use keyword matching or fixed rule sets. A transaction labeled ``team lunch'' gets filed as Food. It probably should be Business. Keyword logic cannot resolve this. A trained probabilistic classifier understands that context matters.
+
+    \item \textbf{No intelligent budget planning.} Most apps let you set a budget manually but offer no recommendation on how to distribute money across categories given your past spending patterns. Users are left to guess. A greedy optimization algorithm can do this work automatically.
+
+    \item \textbf{Projects limited to CRUD are not analytical.} Many student-built finance trackers implement a database and a form, and call it done. The T.U. project requirement specifically asks for algorithm implementation beyond basic operations \cite{tuguide}. PFM will address this by building real NLP, optimization, and forecasting modules that serve as the analytical backbone of the system.
+\end{itemize}
+
+\newpage
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Objectives}
+The specific outcomes we are working toward:
+\begin{itemize}
+    \item To design and implement a custom NLP pipeline in Python that accepts free-form expense text, extracts the amount and description, and classifies the category using a Multinomial Naive Bayes model we train ourselves.
+    \item To build a Greedy Budget Optimizer algorithm that suggests how to distribute a user's total monthly budget across spending categories based on their historical expense ratios.
+    \item To implement a linear regression forecasting module that reads historical expense records and generates a projected monthly spending figure.
+    \item To integrate Google Gemini API \cite{gemini} as a conditional fallback, invoked only when our own classifier's confidence score falls below 75 percent.
+    \item To build a FastAPI \cite{fastapi} backend that exposes all algorithmic modules as REST endpoints, with JWT-based authentication and row-level data isolation.
+    \item To build a React \cite{react} dashboard connected to the backend, showing real-time spending summaries, category breakdowns, the budget optimizer interface, and forecast graphs.
+\end{itemize}
+
+The central commitment is that the NLP pipeline, the budget optimizer, and the forecasting module will be written by us --- not assembled from third-party classification APIs or optimization plugins. The Gemini API will serve a narrow role (disambiguation of ambiguous text input) and we plan to limit its invocation to under 15 percent of total requests through careful model training.
+
+\newpage
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Methodology}
+This section describes our plan for development: what already exists and where it falls short, what the relevant academic literature tells us, what specific algorithms we will write, and how the pieces will connect into a working system.
+
+% ── 4.1 ──────────────────────────────────────────────────────────────────────
+\subsection{Requirement Identification}
+
+\subsubsection{Study of Existing System}
+We reviewed two widely used personal finance applications to understand what gaps the proposed system will fill.
+
+Splitwise is designed for group expense management. It handles splitting bills between multiple people, but it does not function as a personal budgeting tool. There is no monthly trend tracking, no categorized spending breakdown for individual users, and no way to generate forecasts from past records. The application assumes every transaction involves multiple parties, which is not the typical use case for a student managing their own finances.
+
+Wallet by Budget Bakers offers better analytical charts and budget planning features. However, the data entry process is identical to most competitors: you open a form, fill in the amount, select a category from a dropdown, add a note, and save. The interface is polished, but the workflow demands the same manual effort that causes high abandonment rates. Bank sync features are behind a paywall and unavailable in Nepal for most banking institutions.
+
+Neither application implements any NLP module internally. Neither offers an algorithmic budget recommendation. Both depend entirely on structured user input and manual budget entry. Our system will directly address these gaps.
+
+\subsubsection{Literature Review}
+Text classification is a well-studied area of natural language processing. Sebastiani (2002) \cite{sebastiani} established the theoretical foundation for using statistical models to assign documents to predefined categories --- a technique directly applicable to classifying expense descriptions. The Multinomial Naive Bayes classifier has proven effective for short text classification tasks because it handles sparse, high-dimensional feature vectors efficiently.
+
+The TF-IDF (Term Frequency-Inverse Document Frequency) weighting scheme converts raw text into numerical vectors that capture how important a term is to a specific document relative to a broader corpus \cite{manning}. When applied to short expense descriptions, TF-IDF amplifies category-specific terms such as ``fuel'' or ``grocery'' and suppresses generic words like ``spent'' or ``for'' that appear in nearly every entry.
+
+For the forecasting component, ordinary least squares linear regression provides a method to model spending over time and project future totals \cite{montgomery}. Given a sequence of daily expense sums, a fitted regression line captures the trend and produces monthly estimates that update as new data accumulates.
+
+Greedy algorithms are a class of problem-solving strategies that make the locally optimal choice at each step with the aim of approximating a globally optimal result. For budget allocation problems with a fixed total and multiple categories, a greedy approach based on historical spending ratios is both computationally simple and practically effective.
+
+\subsubsection{Requirement Analysis}
+\textbf{Functional requirements} --- what the system must do:
+\begin{itemize}
+    \item Accept raw text input and extract the transaction amount, category, and description using a custom NLP pipeline.
+    \item Authenticate users securely and isolate their data at the database row level.
+    \item Store all parsed transactions in a PostgreSQL table linked to the authenticated user.
+    \item Run a greedy algorithm to suggest a budget allocation across categories when the user inputs a total monthly budget.
+    \item Run a linear regression forecast on existing expense records and return projected totals to the frontend.
+    \item Fall back to Gemini API only when the internal classifier confidence drops below 75 percent.
+\end{itemize}
+
+\textbf{Non-functional requirements} --- how the system must behave:
+\begin{itemize}
+    \item The end-to-end processing time from text submission to dashboard refresh must not exceed three seconds under normal network conditions.
+    \item The classifier must achieve at least 80 percent accuracy on the validation split of our labeled training dataset before it is deployed.
+    \item The user interface must be responsive and usable on mobile browsers without a dedicated native app installation.
+    \item All user data must be isolated by row-level security. No user should be able to access another user's records.
+\end{itemize}
+
+% ── 4.2 ──────────────────────────────────────────────────────────────────────
+\subsection{Feasibility Study}
+
+\subsubsection{Technical Feasibility}
+Both team members have completed coursework in Python, web development, and database management through the seventh semester. The NLP pipeline will use scikit-learn as the mathematical library, which we have worked with during our studies. FastAPI \cite{fastapi} will provide the asynchronous API server. The frontend will be built with React 18 and Vite, which we have used in prior project work.
+
+The most technically demanding component will be the training pipeline for the Naive Bayes classifier --- writing the data loading scripts, the TF-IDF vectorizer fitting logic, the train/validation split, and the model persistence mechanism. This is work we plan to do ourselves; it is not a call to a managed machine learning service.
+
+The full planned technology stack:
+\begin{itemize}
+    \item \textbf{Python 3.11} for the backend language, NLP training scripts, and algorithm implementations.
+    \item \textbf{FastAPI} \cite{fastapi} for the REST API framework, chosen for its native async support and automatic API documentation generation.
+    \item \textbf{scikit-learn} for the Naive Bayes classifier and TF-IDF vectorizer mathematical primitives.
+    \item \textbf{NumPy} for the linear regression least-squares computation.
+    \item \textbf{React 18 + Vite} for the frontend single-page application.
+    \item \textbf{Recharts} for rendering spending charts and forecast graphs.
+    \item \textbf{Supabase} \cite{supabase} for the PostgreSQL database, authentication, and row-level security.
+\end{itemize}
+
+\subsubsection{Operational Feasibility}
+The primary user interface will be a single text input box. Typing a short sentence about a purchase requires no training, no tutorial, and no knowledge of accounting. If a user can send a text message, they can use PFM. The budget optimizer will require the user to enter only one number --- their total monthly budget --- and the algorithm will handle the rest. This makes the system genuinely usable for students and young working adults who have little patience for complex financial software.
+
+\subsubsection{Economic Feasibility}
+We have planned the infrastructure so that the entire system will run at zero cost during development, testing, and initial deployment.
+
+\textbf{Frontend Hosting (CPanel):} The React application will be compiled into a static build (HTML, CSS, and JavaScript files) using Vite. These files will be uploaded and served from a CPanel-based shared hosting server already available to us. CPanel serves static files through Apache, which is more than sufficient for a single-page application. There is no additional cost.
+
+\textbf{Backend Hosting (Netlify):} The FastAPI backend will be deployed as a serverless function on Netlify's free tier. Netlify's free plan provides 125,000 function invocations per month, which comfortably covers our expected request volume during development and testing. When the application is idle, there is no cost.
+
+\textbf{Database (Supabase):} The Supabase \cite{supabase} free tier includes a PostgreSQL database with 500 MB of storage, built-in authentication, and row-level security. For a personal finance tracker used by a small group of users during the project period, 500 MB is more than enough. Each expense record is roughly a few hundred bytes.
+
+\textbf{Gemini API (Conditional Fallback):} The Google Gemini API \cite{gemini} free tier provides up to 1,500 requests per day and 60 requests per minute. Since Gemini will be invoked only when our own classifier's confidence score falls below 75 percent, and our goal is to keep that fallback rate under 15 percent through proper model training, we expect actual Gemini usage to stay well within the free tier for the project duration.
+
+The key point is that PFM's core functionality --- the NLP classification, the greedy budget optimizer, and the regression forecasting --- will all run on our own code without requiring any paid API calls. Gemini is a safety net for edge cases. If the free tier were unavailable, more than 85 percent of inputs would still be classified correctly by our own trained model.
+
+\textbf{Estimated monthly cost during development and testing: NPR 0.}
+
+% ── 4.3 ──────────────────────────────────────────────────────────────────────
+\subsection{Algorithm Design Plan}
+
+This section describes the algorithms we plan to implement. These are not existing tools we will call; they are modules we will write and integrate ourselves.
+
+\subsubsection{Text Preprocessing (Supporting Module)}
+
+Before any input text reaches the classifier, it will pass through a preprocessing pipeline we will build in Python. This pipeline will perform five operations in sequence: (1) convert the text to lowercase, (2) strip currency symbols and punctuation using regular expressions, (3) split the sentence into individual word tokens, (4) remove stop words using a custom list tuned for expense descriptions --- words like ``paid,'' ``spent,'' and ``for'' appear in every entry and carry no category-specific meaning, and (5) extract the numerical amount from the original string using a separate regex routine.
+
+This is a supporting module, not an algorithm in the classical sense, but it is code we will write ourselves and it directly determines the quality of the classifier's input.
+
+\subsubsection{TF-IDF Vectorization (Supporting Module)}
+
+After preprocessing, the cleaned token list will be converted into a numerical feature vector using TF-IDF (Term Frequency-Inverse Document Frequency). The Term Frequency component counts how many times each word appears in the current input. The Inverse Document Frequency component down-weights words that appear frequently across all training samples, and up-weights words that are distinctive to specific categories. For example, the word ``petrol'' appears almost exclusively in Transport entries, so it will get a high IDF weight and become a strong signal for that category.
+
+We will fit the TF-IDF vectorizer on our training data during the training phase and save it to disk. When the FastAPI server starts, it will load the pre-fitted vectorizer so that inference uses exactly the same feature space as training.
+
+\subsubsection{Multinomial Naive Bayes Classifier (Primary NLP Algorithm)}
+
+The Multinomial Naive Bayes classifier is the main algorithm at the heart of PFM's text understanding. It answers one question: given the words in this expense description, which spending category is most likely?
+
+The algorithm works on Bayes' theorem. During training, it will learn from a labeled dataset of approximately 1,200 expense sentences across 10 categories (Food, Transport, Entertainment, Education, Health, Shopping, Utilities, Rent, Subscriptions, and Miscellaneous). For each category, it will calculate how often each word appears in expense descriptions belonging to that category. This builds a word-probability profile for every category.
+
+At inference time, when a user submits new text, the classifier will compute a probability score for each category using those word-probability profiles. The math works like this: for category $C$ and input words $w_1, w_2, \ldots, w_n$:
+
+\[
+P(C \mid w_1, w_2, \ldots, w_n) \propto P(C) \cdot \prod_{i=1}^{n} P(w_i \mid C)
+\]
+
+The category with the highest probability score wins and becomes the predicted label. The probability value itself becomes the confidence score. If this confidence score is 75 percent or above, the server accepts it. If it falls below that threshold, the system invokes the Gemini API fallback.
+
+We will train the model on an 80/20 train-validation split and require at least 80 percent validation accuracy before deploying the model. The trained model will be saved as a serialized file that the FastAPI server loads on startup.
+
+\subsubsection{Confidence-Gated Gemini API Fallback (Integration Module)}
+
+When a user types an unusual or ambiguous expense description --- something our training data did not anticipate --- the Naive Bayes classifier may return a low confidence score. For these cases, and only these cases, the backend will call the Google Gemini API \cite{gemini}.
+
+The call will be a structured prompt containing the original text, the list of valid category names, and an explicit instruction to return only one category name. For example:
+
+\begin{quote}
+\textit{``Given the expense description: `bought iron supplements from pharma.' Classify it into exactly one of the following categories: Food, Transport, Entertainment, Education, Health, Shopping, Utilities, Rent, Subscriptions, Miscellaneous. Return only the category name.''}
+\end{quote}
+
+Gemini will return a single word. The backend will validate that the returned word is one of the 10 valid categories and use it as the final classification. This is a narrow, controlled use of the API --- not open-ended generation.
+
+We will use the Gemini API by sending HTTP POST requests to the Gemini REST endpoint with an API key stored in environment variables on the server. The API is called using Python's \texttt{requests} library. There is no Gemini SDK bundled into our main application logic.
+
+% NLP flow diagram moved to section 4.4
+
+\subsubsection{Greedy Budget Optimizer (Core Algorithm)}
+
+The Budget Optimizer is a feature that will let users enter a total monthly budget and receive a suggested breakdown across expense categories. This is where we plan to apply a greedy algorithm.
+
+The algorithm will work as follows. It will first read the user's last three months of expense records from the database and compute the average monthly spending in each category. It will then calculate each category's proportion of the total historical spending. Finally, it will apply these proportions as weights to distribute the new budget amount across categories.
+
+The greedy step is this: we sort categories by their historical spending proportion in descending order and allocate amounts one at a time, from highest-priority category to lowest. If any category's proportional allocation falls below a user-defined minimum threshold, that category gets the minimum floor amount and the remaining budget is redistributed among the other categories. The algorithm terminates when all categories have been assigned an amount and the total equals the input budget.
+
+Formally, for total budget $B$, $n$ categories with historical proportions $p_1 \geq p_2 \geq \ldots \geq p_n$ (where $\sum p_i = 1$), and minimum floor $f$:
+
+\[
+a_i = \max(p_i \cdot B,\; f) \quad \text{subject to} \quad \sum_{i=1}^{n} a_i = B
+\]
+
+If the floor constraints make the allocations sum to more than $B$, the excess is deducted proportionally from the categories that were allocated above the floor. The greedy logic makes a fast, locally optimal allocation at each step. This will not always produce a mathematically perfect global optimum, but for the budget allocation problem it gives a practical, explainable result that is directly connected to the user's own spending habits.
+
+The algorithm will be implemented as a pure Python function in our FastAPI backend. It will not call any external optimization library.
+
+% Optimizer flow diagram moved to section 4.4
+
+\subsubsection{Linear Regression Forecasting (Secondary Algorithm)}
+
+The forecasting module will read the authenticated user's expense records from the past 30 days, aggregate them into daily totals, and fit an ordinary least squares regression line through those data points. The day number (1 through 30) will be the independent variable and the daily spending total will be the dependent variable.
+
+The fitted line gives a slope that tells us whether spending has been rising or falling. We extrapolate this trend to the end of the current month to produce a projected monthly spending total. A positive slope means spending is increasing; a negative slope means it is decreasing. The frontend will display both the raw daily data points and the trend line so the user can see the projection in context.
+
+The regression coefficients will be computed using NumPy's least-squares solver (\texttt{numpy.linalg.\allowbreak{}lstsq}). The forecasting logic will run entirely within our FastAPI endpoint with no external forecasting service involved.
+
+% ── 4.4 ──────────────────────────────────────────────────────────────────────
+\subsection{High Level Design of System}
+
+The Personal Finance Manager (PFM) is architected as a decoupled, three-tier system comprising a mobile-responsive frontend, a high-performance logic API, and a robust cloud database layer.
+
+For transaction processing, the system employs a hybrid NLP classification engine within the backend. When raw text is submitted from the React interface, the FastAPI controller first executes a localized regex-based parser to identify common spending patterns and keywords in real-time. If the localized match fails or results in low confidence, the system dynamically leverages the Gemini API as an intelligent fallback to categorize complex or unstructured descriptions. Conversational financial queries are handled through a Retrieval-Augmented Generation (RAG) service, which architecturally groups historical transaction data into time-aware context (monthly and yearly breakdowns) before passing it to the language model for accurate, data-driven responses.
+
+Analytical features, including the Greedy Budget Optimizer and Moving Average spending trends, are implemented as modular algorithms within the frontend utility layer. This ensures a highly responsive user experience by performing complex financial calculations locally on data synchronized from Supabase.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\textwidth]{hld.png}
+    \caption{High-Level System Architecture (Tiered Design)}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{sequence.png}
+    \caption{Sequence Diagram: Hybrid Expense Classification Process}
+\end{figure}
+
+
+
+
+\newpage
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Gantt Chart}
+The planned timeline spans eighteen weeks from mid-March to late July 2026. The chart below shows how the major work phases are distributed across that period. Algorithm implementation (the NLP training pipeline and the greedy optimizer) is allocated the longest window because it is the most unpredictable component in terms of iteration time.
+
+\begin{figure}[H]
+    \centering
+    \begin{ganttchart}[
+        x unit=0.55cm,
+        y unit title=0.6cm,
+        y unit chart=0.6cm,
+        vgrid,
+        hgrid,
+        title label anchor/.style={below=-1.5ex},
+        title height=1,
+        bar/.style={fill=black!60},
+        bar label font=\footnotesize,
+        title label font=\footnotesize,
+        progress label text={},
+        bar height=0.6
+      ]{1}{18}
+      \gantttitle{Mar}{2} \gantttitle{Apr}{4} \gantttitle{May}{4} \gantttitle{Jun}{4} \gantttitle{Jul}{4} \\
+      \gantttitlelist{3,4, 1,2,3,4, 1,2,3,4, 1,2,3,4, 1,2,3,4}{1} \\
+      \ganttbar{System Study \& Lit. Review}{1}{3} \\
+      \ganttbar{Requirement Gathering}{2}{4} \\
+      \ganttbar{Architecture \& DB Design}{4}{6} \\
+      \ganttbar{Backend Core Dev (FastAPI)}{6}{10} \\
+      \ganttbar{NLP Training \& Greedy Optimizer}{8}{13} \\
+      \ganttbar{Frontend Interface (React)}{10}{14} \\
+      \ganttbar{System Integration \& Testing}{13}{16} \\
+      \ganttbar{Report Writing \& Defense}{16}{18}
+    \end{ganttchart}
+    \caption{Project Timeline: March to July 2026}
+\end{figure}
+
+\newpage
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Expected Outcome}
+At the end of the project, we expect to have delivered a working web application where:
+
+\begin{itemize}
+    \item A user can type any expense in plain English and have it categorized correctly at least 80 percent of the time by our custom-coded regex parsing engine, which handles common keywords and patterns locally.
+    \item The Gemini API fallback handles the remaining ambiguous cases and keeps the overall classification accuracy above 90 percent.
+    \item The Budget Optimizer returns a suggested category-level allocation derived from the user's historical spending data using the custom greedy algorithm implemented in the frontend.
+    \item The spending trends module provides smooth, realistic forecasting via a 7-day moving average trend line.
+    \item The complete flow from text input to dashboard update completes within three seconds under normal network conditions.
+\end{itemize}
+
+As a final year project under the T.U. BCA 8th semester guidelines \cite{tuguide}, PFM demonstrates the implementation of custom logic modules rather than sole reliance on external black-box plugins. The hybrid NLP engine, the greedy budget optimizer, and the trend forecasting algorithms are the core evidence of this technical proficiency. Gemini serves only as an intelligent fallback layer, with the primary logic flow controlled by our own application code.
+
+\newpage
+% ─────────────────────────────────────────────────────────────────────────────
+\section{References}
+
+\begin{thebibliography}{99}
+
+\bibitem{fastapi}
+Ramirez, S. (n.d.). \textit{FastAPI Documentation.} Retrieved from \url{https://fastapi.tiangolo.com/}
+
+\bibitem{react}
+Facebook Inc. (n.d.). \textit{React --- A JavaScript library for building user interfaces.} Retrieved from \url{https://react.dev/}
+
+\bibitem{gemini}
+Google LLC. (2024). \textit{Gemini API Documentation.} Retrieved from \url{https://ai.google.dev/}
+
+\bibitem{supabase}
+Supabase Inc. (n.d.). \textit{Supabase --- Open source Firebase alternative with PostgreSQL.} Retrieved from \url{https://supabase.com/docs}
+
+\bibitem{sebastiani}
+Sebastiani, F. (2002). Machine learning in automated text categorization. \textit{ACM Computing Surveys}, 34(1), 1--47. \url{https://doi.org/10.1145/505282.505283}
+
+\bibitem{manning}
+Manning, C. D., Raghavan, P., \& Schuetze, H. (2008). \textit{Introduction to Information Retrieval.} Cambridge University Press. Retrieved from \url{https://nlp.stanford.edu/IR-book/}
+
+\bibitem{montgomery}
+Montgomery, D. C., Peck, E. A., \& Vining, G. G. (2012). \textit{Introduction to Linear Regression Analysis} (5th ed.). Wiley.
+
+\bibitem{tuguide}
+Tribhuvan University, Faculty of Humanities and Social Sciences. (2023). \textit{BCA 8th Semester Project Guidelines.} Kathmandu: T.U. Publications.
+
+\end{thebibliography}
+
+\end{document}

@@ -1,0 +1,66 @@
+
+@startuml
+
+skinparam shadowing false
+skinparam monochrome true
+skinparam linetype ortho
+skinparam PackageStyle rectangle
+skinparam roundCorner 0
+skinparam nodesep 100
+skinparam ranksep 100
+skinparam defaultFontSize 14
+
+skinparam class {
+    BackgroundColor white
+    ArrowColor black
+    BorderColor black
+}
+
+skinparam component {
+    BackgroundColor white
+    ArrowColor black
+    BorderColor black
+}
+
+skinparam sequence {
+    ArrowColor black
+    LifeLineBorderColor black
+    ParticipantBorderColor black
+    ParticipantBackgroundColor white
+    GroupBodyBackgroundColor transparent
+    GroupHeaderFontSize 14
+}
+
+scale 1.2
+
+actor User
+participant "Mobile UI" as UI
+participant "FastAPI" as API
+participant "NLP Engine" as NLP
+participant "Gemini API" as LLM
+database "Supabase" as DB
+
+User -> UI : Input text
+UI -> API : POST /parse
+activate API
+API -> NLP : parse_expense()
+activate NLP
+
+NLP -> NLP : Regex Match
+alt if pattern fails
+    NLP -> LLM : Enhanced AI Parse
+    LLM -> NLP : JSON Response
+end
+
+NLP -> API : Structured Data
+deactivate NLP
+
+API -> UI : Result
+deactivate API
+
+UI -> User : Confirm save?
+User -> UI : Confirm
+UI -> DB : Insert record
+DB -> UI : Success
+UI -> User : Done
+@enduml
