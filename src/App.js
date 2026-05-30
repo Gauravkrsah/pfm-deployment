@@ -188,7 +188,6 @@ function App() {
                 user={user}
                 currentGroup={currentGroup}
                 isVisible={true}
-                activeTab={activeTab}
                 showMessagesArea={true}
                 onClearChat={() => {
                   localStorage.removeItem('pfm_messages')
@@ -300,7 +299,7 @@ function App() {
                   if (!text.trim()) return
 
                   try {
-                    const response = await axios.post(`${window.APP_CONFIG?.API_BASE_URL || ''}/api/expenses/parse`, { text })
+                    const response = await axios.post(`${window.APP_CONFIG?.API_BASE_URL || ''}/api/expenses/parse`, { text, mode: 'expense' })
                     const { expenses } = response.data
                     if (expenses && expenses.length > 0) {
                       await handleExpenseAdded(expenses)

@@ -38,6 +38,8 @@ export default function MainLayout({ children, activeTab, setActiveTab, user, on
                 </div>
             </main>
 
+            <Header user={user} onLogout={onLogout} onProfileUpdate={() => { }} currentGroup={currentGroup} autoPromptProfile />
+
             {/* Bottom Nav - Mobile */}
             <MobileNav activeTab={activeTab} setActiveTab={setActiveTab} />
         </div>

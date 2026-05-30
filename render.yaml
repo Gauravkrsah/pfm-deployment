@@ -11,5 +11,11 @@ services:
         sync: false
       - key: SUPABASE_KEY
         sync: false
-      - key: GEMINI_API_KEY
+      - key: NVIDIA_API_KEY
         sync: false
+      - key: NVIDIA_NIM_MODEL
+        value: nvidia/nemotron-3-super-120b-a12b
+      - key: NVIDIA_NIM_ENTRY_MODEL
+        value: nvidia/llama-3.1-nemotron-nano-8b-v1
+      - key: NVIDIA_NIM_MAX_TOKENS
+        value: "1200"

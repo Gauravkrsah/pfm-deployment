@@ -7,7 +7,7 @@
 
 **Personal Finance Manager (PFM)** is an AI-powered hybrid mobile application that enables users to track expenses using natural language input. Users can simply type transactions like *"biryani rahul 500"* or *"taxi to airport 1500"*, and the system automatically extracts the amount, categorizes the expense, and identifies any associated parties.
 
-The application combines a **React** frontend with a **FastAPI** backend, leveraging **Google Gemini AI** for intelligent natural language processing and **Supabase** for authentication and data persistence. The mobile experience is delivered through **Capacitor**, enabling native Android deployment from a single codebase.
+The application combines a **React** frontend with a **FastAPI** backend, leveraging **NVIDIA NIM** for intelligent natural language processing and **Supabase** for authentication and data persistence. The mobile experience is delivered through **Capacitor**, enabling native Android deployment from a single codebase.
 
 ### Key Metrics
 
@@ -18,7 +18,7 @@ The application combines a **React** frontend with a **FastAPI** backend, levera
 | NLP Parsing Patterns | 50+ Regex Templates |
 | Expense Categories | 20+ Auto-Detection |
 | Platform Support | Android + Web |
-| AI Model | Google Gemini 2.5 Flash |
+| AI Model | NVIDIA Nemotron 3 Super 120B A12B |
 
 ---
 
@@ -63,7 +63,7 @@ flowchart TB
     end
     
     subgraph External["External Services"]
-        Gemini["Google Gemini AI"]
+        NIM["NVIDIA NIM"]
         SupabaseDB["Supabase<br/>(PostgreSQL)"]
     end
     
@@ -74,8 +74,8 @@ flowchart TB
     Components --> SupabaseClient
     API --> NLP
     API --> RAG
-    NLP --> Gemini
-    RAG --> Gemini
+    NLP --> NIM
+    RAG --> NIM
     SupabaseClient --> SupabaseDB
 ```
 
@@ -86,7 +86,7 @@ sequenceDiagram
     participant U as User
     participant F as Frontend
     participant B as Backend
-    participant G as Gemini AI
+    participant G as NVIDIA NIM
     participant D as Database
 
     U->>F: "biryani rahul 500"
@@ -195,7 +195,7 @@ The core NLP engine with **1,666 lines** of Python code:
 class NLPService:
     def __init__(self):
         self.parser = ExpenseParser()    # Regex-based parser
-        self._setup_gemini()              # AI model initialization
+        self._setup_nim()                 # AI model initialization
         self.rag_service = RAGService()  # Query answering
 ```
 
@@ -204,7 +204,7 @@ class NLPService:
 | Method | Description |
 |--------|-------------|
 | `parse_expense(text)` | Main entry point for parsing expense text |
-| `_ai_enhanced_parse(text)` | Uses Gemini for complex parsing |
+| `_ai_enhanced_parse(text)` | Uses NVIDIA NIM for complex parsing |
 | `_preprocess_text(text)` | Handles "lakh", "crore", "k" formats |
 | `chat_about_expenses(request)` | Answers questions about expenses |
 
@@ -304,7 +304,7 @@ flowchart TD
     Preprocess["Pre-processing<br/>(normalize units)"]
     Regex["Regex Pattern Matching<br/>(50+ patterns)"]
     Check{Pattern<br/>Matched?}
-    AI["Gemini AI Parsing"]
+    AI["NVIDIA NIM Parsing"]
     Categorize["Category Detection<br/>(20+ categories)"]
     Person["Person Detection<br/>(smart heuristics)"]
     Output["Structured Output"]
@@ -382,7 +382,7 @@ flowchart LR
     Query["User Query<br/>'How much on food?'"]
     Retrieve["Retrieve Relevant<br/>Expenses"]
     Context["Build Context<br/>(structured data)"]
-    Generate["Generate Response<br/>(Gemini AI)"]
+    Generate["Generate Response<br/>(NVIDIA NIM)"]
     Response["Natural Language<br/>Answer"]
     
     Query --> Retrieve
@@ -407,7 +407,7 @@ async def query_expenses(self, query, expenses_data, user_name):
     # 3. Build context for AI
     context = self._prepare_expense_context(relevant, query)
     
-    # 4. Generate response with Gemini
+    # 4. Generate response with NVIDIA NIM
     prompt = f"""
     User: {user_name}
     Query: {query}
@@ -539,8 +539,11 @@ REACT_APP_API_BASE_URL=http://localhost:8000
 ## Backend (`backend/.env`)
 
 ```env
-# Google Gemini AI
-GEMINI_API_KEY=your-gemini-api-key
+# NVIDIA NIM
+NVIDIA_API_KEY=your-nvidia-api-key
+NVIDIA_NIM_MODEL=nvidia/nemotron-3-super-120b-a12b
+NVIDIA_NIM_ENTRY_MODEL=nvidia/llama-3.1-nemotron-nano-8b-v1
+NVIDIA_NIM_BASE_URL=https://integrate.api.nvidia.com/v1
 
 # Supabase Configuration
 SUPABASE_URL=https://your-project.supabase.co
@@ -617,7 +620,7 @@ pfm/
 |---------|---------|---------|
 | fastapi | 0.104.1 | Web framework |
 | uvicorn | 0.24.0 | ASGI server |
-| google-generativeai | >=0.8.0 | Gemini AI SDK |
+| openai | >=1.30.0 | NVIDIA NIM-compatible chat client |
 | supabase | 2.3.4 | Database client |
 | python-dotenv | 1.0.0 | Environment loading |
 | pydantic | >=2.0.0 | Data validation |

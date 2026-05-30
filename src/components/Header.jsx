@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { supabase } from '../supabase'
 import { useToast } from './Toast'
+import { syncUserProfile } from '../utils/profile'
 
-export default function Header({ user, onLogout, onProfileUpdate, currentGroup, compact = false }) {
+export default function Header({ user, onLogout, onProfileUpdate, currentGroup, compact = false, autoPromptProfile = false }) {
   const [showProfileMenu, setShowProfileMenu] = useState(false)
   const [isEditingProfile, setIsEditingProfile] = useState(false)
   const [profile, setProfile] = useState({
@@ -12,12 +14,27 @@ export default function Header({ user, onLogout, onProfileUpdate, currentGroup, 
   })
   const [loading, setLoading] = useState(false)
   const toast = useToast()
+  const isProfileRequired = Boolean(user && !user.user_metadata?.name?.trim())
 
   useEffect(() => {
-    if (user && !user.user_metadata?.name) {
+    setProfile({
+      name: user?.user_metadata?.name || '',
+      phone: user?.user_metadata?.phone || '',
+      bio: user?.user_metadata?.bio || ''
+    })
+  }, [user])
+
+  useEffect(() => {
+    if (autoPromptProfile && isProfileRequired) {
       setIsEditingProfile(true)
     }
-  }, [user])
+  }, [autoPromptProfile, isProfileRequired])
+
+  useEffect(() => {
+    if (user && !isProfileRequired) {
+      syncUserProfile(user)
+    }
+  }, [user, isProfileRequired])
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -26,33 +43,52 @@ export default function Header({ user, onLogout, onProfileUpdate, currentGroup, 
 
   const updateProfile = async (e) => {
     e.preventDefault()
+    const nextProfile = {
+      name: profile.name.trim(),
+      phone: profile.phone.trim(),
+      bio: profile.bio.trim()
+    }
+
+    if (!nextProfile.name) {
+      toast.error('Please enter your name')
+      return
+    }
+
     setLoading(true)
 
     try {
       const { error: metadataError } = await supabase.auth.updateUser({
         data: {
-          name: profile.name,
-          phone: profile.phone,
-          bio: profile.bio
+          name: nextProfile.name,
+          phone: nextProfile.phone,
+          bio: nextProfile.bio
         }
       })
 
-      if (profile.name && !metadataError) {
+      if (!metadataError) {
         await supabase.auth.updateUser({
           data: {
-            display_name: profile.name,
-            full_name: profile.name,
-            name: profile.name,
-            phone: profile.phone,
-            bio: profile.bio
+            display_name: nextProfile.name,
+            full_name: nextProfile.name,
+            name: nextProfile.name,
+            phone: nextProfile.phone,
+            bio: nextProfile.bio
           }
         })
       }
 
       if (!metadataError) {
+        const { error: profileError } = await syncUserProfile(user, nextProfile.name)
+        if (profileError) {
+          toast.error('Profile saved, but member name sync failed: ' + profileError.message)
+          setLoading(false)
+          return
+        }
+
+        setProfile(nextProfile)
         setIsEditingProfile(false)
         setShowProfileMenu(false)
-        onProfileUpdate?.(profile)
+        onProfileUpdate?.(nextProfile)
         toast.success('Profile updated')
         setTimeout(() => window.location.reload(), 500)
       } else {
@@ -66,6 +102,41 @@ export default function Header({ user, onLogout, onProfileUpdate, currentGroup, 
 
   const userName = user?.user_metadata?.name || user?.email?.split('@')[0] || 'User'
   const userInitial = userName.charAt(0).toUpperCase()
+  const profileModal = isEditingProfile ? (
+    <div className="fixed inset-0 bg-black/40 dark:bg-black/60 flex items-center justify-center p-4 z-[1000]">
+      <div className="bg-white dark:bg-paper-200 border border-gray-200 dark:border-paper-300 shadow-lg rounded-2xl max-w-md w-full p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-gray-900 dark:text-gray-100">Edit Profile</h3>
+          {!isProfileRequired && (
+            <button onClick={() => setIsEditingProfile(false)} className="text-gray-400 hover:text-black dark:hover:text-white" aria-label="Close profile editor">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          )}
+        </div>
+
+        <form onSubmit={updateProfile} className="space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Name</label>
+            <input type="text" value={profile.name} onChange={(e) => setProfile({ ...profile, name: e.target.value })} className="input-field dark:bg-paper-300 dark:border-paper-400 dark:text-gray-100" required autoFocus />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Phone</label>
+            <input type="tel" value={profile.phone} onChange={(e) => setProfile({ ...profile, phone: e.target.value })} className="input-field dark:bg-paper-300 dark:border-paper-400 dark:text-gray-100" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Bio</label>
+            <textarea value={profile.bio} onChange={(e) => setProfile({ ...profile, bio: e.target.value })} rows={3} className="input-field resize-none dark:bg-paper-300 dark:border-paper-400 dark:text-gray-100" />
+          </div>
+          <div className="flex gap-2 pt-2">
+            <button type="submit" disabled={loading} className="flex-1 btn-primary disabled:opacity-50">{loading ? 'Saving...' : 'Save'}</button>
+            {!isProfileRequired && (
+              <button type="button" onClick={() => setIsEditingProfile(false)} className="flex-1 btn-secondary">Cancel</button>
+            )}
+          </div>
+        </form>
+      </div>
+    </div>
+  ) : null
 
   return (
     <>
@@ -96,37 +167,7 @@ export default function Header({ user, onLogout, onProfileUpdate, currentGroup, 
         </div>
       )}
 
-      {isEditingProfile && (
-        <div className="fixed inset-0 bg-black/40 dark:bg-black/60 flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-paper-200 border border-gray-200 dark:border-paper-300 shadow-lg rounded-2xl max-w-md w-full p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-gray-900 dark:text-gray-100">Edit Profile</h3>
-              <button onClick={() => setIsEditingProfile(false)} className="text-gray-400 hover:text-black dark:hover:text-white">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
-            </div>
-
-            <form onSubmit={updateProfile} className="space-y-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Name</label>
-                <input type="text" value={profile.name} onChange={(e) => setProfile({ ...profile, name: e.target.value })} className="input-field dark:bg-paper-300 dark:border-paper-400 dark:text-gray-100" required autoFocus={!user?.user_metadata?.name} />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Phone</label>
-                <input type="tel" value={profile.phone} onChange={(e) => setProfile({ ...profile, phone: e.target.value })} className="input-field dark:bg-paper-300 dark:border-paper-400 dark:text-gray-100" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Bio</label>
-                <textarea value={profile.bio} onChange={(e) => setProfile({ ...profile, bio: e.target.value })} rows={3} className="input-field resize-none dark:bg-paper-300 dark:border-paper-400 dark:text-gray-100" />
-              </div>
-              <div className="flex gap-2 pt-2">
-                <button type="submit" disabled={loading} className="flex-1 btn-primary disabled:opacity-50">{loading ? 'Saving...' : 'Save'}</button>
-                <button type="button" onClick={() => setIsEditingProfile(false)} className="flex-1 btn-secondary">Cancel</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {profileModal && createPortal(profileModal, document.body)}
 
 
     </>

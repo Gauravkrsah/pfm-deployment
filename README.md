@@ -12,7 +12,7 @@ A hybrid mobile application for intelligent expense tracking using natural langu
 ## 🚀 Key Features
 
 - **Natural Language Input** — Log expenses in plain English/Hinglish
-- **AI-Powered Categorization** — Google Gemini automatically categorizes expenses
+- **AI-Powered Categorization** — NVIDIA NIM intelligently categorizes complex expenses
 - **Smart Chat Interface** — Ask questions like *"How much did I spend on food this month?"*
 - **Multi-Group Support** — Manage personal, family, and shared expenses
 - **Financial Analytics** — Visual dashboards with expense trends
@@ -77,7 +77,11 @@ REACT_APP_API_BASE_URL=http://localhost:8000
 
 **Backend** (`backend/.env`):
 ```env
-GEMINI_API_KEY=your_gemini_api_key
+NVIDIA_API_KEY=your_nvidia_api_key
+NVIDIA_NIM_MODEL=nvidia/nemotron-3-super-120b-a12b
+NVIDIA_NIM_ENTRY_MODEL=nvidia/llama-3.1-nemotron-nano-8b-v1
+NVIDIA_NIM_BASE_URL=https://integrate.api.nvidia.com/v1
+NVIDIA_NIM_MAX_TOKENS=1200
 SUPABASE_URL=your_supabase_url
 SUPABASE_SERVICE_KEY=your_supabase_service_role_key
 PORT=8000
@@ -184,7 +188,7 @@ pfm/
 | **Frontend** | React 18, TailwindCSS, Recharts |
 | **Mobile** | Capacitor 6 (Android) |
 | **Backend** | FastAPI, Uvicorn |
-| **AI/NLP** | Google Gemini API |
+| **AI/NLP** | NVIDIA NIM API (`nvidia/nemotron-3-super-120b-a12b`) |
 | **Database** | Supabase (PostgreSQL) |
 | **Auth** | Supabase Auth |
 
@@ -212,4 +216,4 @@ This project is proprietary software. All rights reserved.
 
 ---
 
-*Built with ❤️ using React, FastAPI, and Google Gemini AI*
+*Built with React, FastAPI, and NVIDIA NIM*

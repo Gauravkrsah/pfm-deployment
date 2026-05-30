@@ -1,6 +1,7 @@
 import re
 import json
 import os
+from difflib import get_close_matches
 from typing import List, Dict, Any, Optional
 
 # pyre-ignore[21]
@@ -8,13 +9,17 @@ from dotenv import load_dotenv
 
 try:
     # pyre-ignore[21]
-    import google.generativeai as genai
-    GENAI_AVAILABLE = True
+    from openai import OpenAI
+    NIM_AVAILABLE = True
 except ImportError:
-    GENAI_AVAILABLE = False
-    genai = None
+    NIM_AVAILABLE = False
+    OpenAI = None
 
 load_dotenv()
+
+DEFAULT_NIM_BASE_URL = "https://integrate.api.nvidia.com/v1"
+DEFAULT_NIM_MODEL = "nvidia/nemotron-3-super-120b-a12b"
+DEFAULT_NIM_ENTRY_MODEL = "nvidia/llama-3.1-nemotron-nano-8b-v1"
 
 class ExpenseParser:
     def __init__(self):
@@ -74,7 +79,38 @@ class ExpenseParser:
             'donation', 'charity', 'gift', 'present', 'tax', 'fine', 'penalty', 'interest',
             'emi', 'loan', 'debt', 'salary', 'wages', 'bonus', 'incentive'
         }
-    
+
+        self.typo_corrections = {
+            'petril': 'petrol',
+            'petorl': 'petrol',
+            'petol': 'petrol',
+            'petrel': 'petrol',
+            'disel': 'diesel',
+            'diseal': 'diesel',
+            'resturant': 'restaurant',
+            'restaurent': 'restaurant',
+            'restrant': 'restaurant',
+            'grosary': 'grocery',
+            'grocary': 'grocery',
+            'grocry': 'grocery',
+            'vegitables': 'vegetables',
+            'vegitable': 'vegetables',
+            'vegtable': 'vegetables',
+            'medecine': 'medicine',
+            'medicin': 'medicine',
+            'electricty': 'electricity',
+            'electrcity': 'electricity',
+            'intenet': 'internet',
+            'interent': 'internet',
+            'rechrge': 'recharge',
+            'rechage': 'recharge',
+            'cofee': 'coffee',
+            'coffe': 'coffee',
+            'cury': 'curry',
+            'biryni': 'biryani',
+            'biriyani': 'biryani',
+        }
+
     def parse(self, text):
         expenses = []
         text = text.strip()
@@ -1093,6 +1129,24 @@ class ExpenseParser:
         
         return item_title
 
+    def _is_placeholder_remark(self, remark):
+        return str(remark or "").strip().lower() in {
+            "short summary",
+            "summary",
+            "brief summary",
+            "note",
+            "remarks",
+            "n/a",
+            "na",
+            "-",
+        }
+
+    def _normalise_remark(self, remark, item, category):
+        """Replace generic model placeholders with a note tied to the actual item."""
+        if not remark or self._is_placeholder_remark(remark):
+            return self._generate_detailed_remark(item, category)
+        return str(remark).strip()
+
     def _clean_item_name(self, item):
         """Clean and normalize item names"""
         item = item.strip()
@@ -1117,8 +1171,7 @@ class ExpenseParser:
             'admission fee': 'admission fee', 'fee': 'fee'
         }
         
-        item_lower = item.lower()
-        item_lower = item.lower()
+        item_lower = self._normalise_typos(item.lower())
         for nepali, english in nepali_mappings.items():
             # Use word boundaries to avoid partial matches (e.g. "anda" in "chandan")
             if re.search(r'\b' + re.escape(nepali) + r'\b', item_lower):
@@ -1128,6 +1181,31 @@ class ExpenseParser:
                 break
         
         return item
+
+    def _normalise_typos(self, text):
+        """Correct common transaction typos while leaving unknown names alone."""
+        if not text:
+            return text
+
+        vocab = sorted(self.all_keywords | set(self.typo_corrections.values()))
+
+        def replace_token(match):
+            token = match.group(0)
+            lower = token.lower()
+
+            if lower in self.typo_corrections:
+                return self.typo_corrections[lower]
+
+            if lower in self.all_keywords or len(lower) < 4:
+                return token
+
+            close = get_close_matches(lower, vocab, n=1, cutoff=0.82)
+            if close:
+                return close[0]
+
+            return token
+
+        return re.sub(r'\b[a-zA-Z]+\b', replace_token, text)
     
     def _categorize(self, description):
         description_lower = description.lower()
@@ -1211,10 +1289,12 @@ class ExpenseParser:
 
 class NLPService:
     def __init__(self):
-        self.gemini_available = False
-        self.model = None
+        self.nim_available = False
+        self.nim_client = None
+        self.nim_model = os.getenv("NVIDIA_NIM_MODEL", DEFAULT_NIM_MODEL)
+        self.nim_entry_model = os.getenv("NVIDIA_NIM_ENTRY_MODEL", DEFAULT_NIM_ENTRY_MODEL)
         self.parser = ExpenseParser()
-        self._setup_gemini()
+        self._setup_nim()
         # Initialize RAG service
         try:
             # pyre-ignore[21]
@@ -1224,170 +1304,239 @@ class NLPService:
             print(f"RAG Service initialization failed: {e}")
             self.rag_service = None
     
-    def _setup_gemini(self):
-        """Setup Gemini AI with error handling"""
-        self.gemini_available = False
-        self.model = None
+    def _setup_nim(self):
+        """Set up NVIDIA NIM through its OpenAI-compatible API."""
+        self.nim_available = False
+        self.nim_client = None
         
-        if not GENAI_AVAILABLE:
-            print("WARNING: google-generativeai not installed")
+        if not NIM_AVAILABLE:
+            print("WARNING: openai package not installed; NVIDIA NIM is unavailable")
             return
         
-        gemini_api_key = os.getenv("GEMINI_API_KEY")
-        if gemini_api_key and gemini_api_key.strip():
+        api_key = os.getenv("NVIDIA_API_KEY")
+        if api_key and api_key.strip():
             try:
                 # pyre-ignore[16]
-                genai.configure(api_key=gemini_api_key)
-                # gemini-2.5-flash found to be more stable on free tier than 2.0-flash
-                # pyre-ignore[16]
-                self.model = genai.GenerativeModel('gemini-2.5-flash')
-                self.gemini_available = True
-                print("SUCCESS: Gemini API configured (gemini-2.5-flash)")
+                self.nim_client = OpenAI(
+                    base_url=os.getenv("NVIDIA_NIM_BASE_URL", DEFAULT_NIM_BASE_URL),
+                    api_key=api_key,
+                    timeout=45.0,
+                    max_retries=0,
+                )
+                self.nim_available = True
+                print(f"SUCCESS: NVIDIA NIM configured ({self.nim_model})")
             except Exception as e:
-                print(f"ERROR: Gemini API setup failed: {e}")
+                print(f"ERROR: NVIDIA NIM setup failed: {e}")
     
-    def get_gemini_response(self, prompt: str) -> Optional[str]:
-        """Get response from Gemini with error handling and retries"""
-        if not self.model or not self.gemini_available:
+    def get_nim_response(
+        self,
+        prompt: str,
+        model: Optional[str] = None,
+        max_tokens: int = 600,
+        temperature: float = 0.2,
+        retries: int = 3,
+        system_prompt: Optional[str] = None,
+    ) -> Optional[str]:
+        """Get an NVIDIA NIM chat completion with transient-error retries."""
+        if not self.nim_client or not self.nim_available:
             return None
         
-        # Retry configuration
-        max_retries = 3
+        selected_model = model or self.nim_model
+        max_retries = retries
         base_delay = 2
         
         import time
         
         for attempt in range(max_retries + 1):
             try:
+                messages = []
+                if system_prompt:
+                    messages.append({"role": "system", "content": system_prompt})
+                messages.append({"role": "user", "content": prompt})
                 # pyre-ignore[16]
-                response = self.model.generate_content(prompt)
-                if response and response.text:
-                    return response.text.strip()
+                request_options = {
+                    "model": selected_model,
+                    "messages": messages,
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                    "stream": False,
+                }
+                if selected_model.startswith("nvidia/nemotron-3-"):
+                    request_options["extra_body"] = {"reasoning_effort": "low"}
+                response = self.nim_client.chat.completions.create(**request_options)
+                if response and response.choices and response.choices[0].message.content:
+                    return response.choices[0].message.content.strip()
             except Exception as e:
                 error_str = str(e).lower()
                 # Check for rate limit errors (429 or quota exceeded)
-                if '429' in error_str or 'quota' in error_str:
+                if '429' in error_str or 'quota' in error_str or 'rate limit' in error_str:
                     if attempt < max_retries:
                         delay = base_delay * (2 ** attempt) # Exponential backoff: 2, 4, 8 sent
-                        print(f"Gemini Rate Limit (429). Retrying in {delay}s... (Attempt {attempt+1}/{max_retries})")
+                        print(f"NVIDIA NIM rate limit. Retrying in {delay}s... (Attempt {attempt+1}/{max_retries})")
                         time.sleep(delay)
                         continue
                     else:
-                        print(f"Gemini Rate Limit Exceeded after {max_retries} retries.")
+                        print(f"NVIDIA NIM rate limit exceeded after {max_retries} retries.")
                 else:
-                    print(f"Gemini API error: {e}")
+                    print(f"NVIDIA NIM API error: {e}")
                     # Non-retryable error
                     break
         
         return None
-    
-    async def _ai_enhanced_parse(self, text):
-        """Use AI to intelligently parse expense text"""
+
+    def _resolve_explicit_loan_direction(self, expenses: list, text: str) -> list:
+        """Use known loan phrases to prevent needless confirmation on clear entries."""
+        if len(expenses) != 1:
+            return expenses
+        clear_direction = re.search(
+            r"\b(borrow(?:ed)?|lent|lend|gave\s+loan|loan\s+to|paid\s+(?:me\s+)?back|repaid|returned|got\s+back)\b",
+            text,
+            re.IGNORECASE,
+        )
+        if not clear_direction:
+            return expenses
+        local_expenses, _ = self.parser.parse(text)
+        if len(local_expenses) != 1 or local_expenses[0].get("category", "").lower() != "loan":
+            return expenses
+        local_expense = local_expenses[0]
+        if not local_expense.get("paid_by"):
+            return expenses
+        expenses[0].update({
+            "amount": local_expense["amount"],
+            "paid_by": local_expense["paid_by"],
+            "remarks": local_expense["remarks"],
+            "needs_confirmation": False,
+        })
+        return expenses
+
+    def _normalise_nim_transactions(self, expenses: list, mode: str) -> list:
+        """Validate model-produced records and enforce the selected transaction mode."""
+        normalised = []
+        for raw_expense in expenses:
+            try:
+                raw_amount = str(raw_expense.get("amount", "")).replace(",", "")
+                raw_amount = re.sub(r"[^\d.\-]", "", raw_amount)
+                amount_value = float(raw_amount)
+                amount = int(amount_value) if amount_value.is_integer() else amount_value
+            except (TypeError, ValueError):
+                continue
+
+            if amount == 0:
+                continue
+
+            item = str(raw_expense.get("item") or "").strip()
+            if not item:
+                continue
+
+            category = str(raw_expense.get("category") or "").strip().title()
+            paid_by = raw_expense.get("paid_by")
+            paid_by = str(paid_by).strip().title() if paid_by else None
+            needs_confirmation = bool(raw_expense.get("needs_confirmation", False))
+            transaction_type = str(raw_expense.get("transaction_type") or mode).strip().lower()
+
+            if mode == "income":
+                amount = -abs(amount)
+                category = "Income"
+                needs_confirmation = False
+                paid_by = None
+            elif mode == "loan":
+                category = "Loan"
+            else:
+                amount = abs(amount)
+                needs_confirmation = False
+                if not category or category.lower() in {"other", "expense", "general"}:
+                    category = "Miscellaneous"
+
+            remarks = self.parser._normalise_remark(raw_expense.get("remarks"), item, category)
+
+            normalised.append({
+                "amount": amount,
+                "item": item.title(),
+                "category": category or "Miscellaneous",
+                "remarks": remarks,
+                "paid_by": paid_by,
+                "needs_confirmation": needs_confirmation,
+                "transaction_type": transaction_type,
+                "ai_classified": True,
+            })
+        return normalised
+
+    def _format_entry_reply(self, expenses: list, mode: str) -> str:
+        if not expenses:
+            return "I could not identify a transaction with an amount. Please try again."
+        if any(exp.get("needs_confirmation") for exp in expenses):
+            expense = next(exp for exp in expenses if exp.get("needs_confirmation"))
+            person = expense.get("paid_by") or "the other person"
+            return f"I found a loan entry of Rs.{abs(expense['amount']):,.0f} involving {person}. Please confirm the direction."
+        if len(expenses) > 1:
+            return f"Saved {len(expenses)} {mode} entries with automatically selected categories."
+
+        expense = expenses[0]
+        amount = abs(expense["amount"])
+        if mode == "income":
+            return f"Saved income of Rs.{amount:,.0f} from {expense['item']}."
+        if mode == "loan":
+            return f"Saved loan transaction of Rs.{amount:,.0f}: {expense['remarks']}."
+        return f"Saved Rs.{amount:,.0f} for {expense['item']} under {expense['category']}."
+
+    async def _ai_enhanced_parse(self, text: str, mode: str = "expense"):
+        """Use a low-latency NIM model to understand and categorize a new entry."""
         try:
             prompt = f"""
-You are an intelligent personal finance assistant. Parse the following text into structured transaction data.
-Your goal is to "understand" the intent behind the transaction and categorize it accurately.
+Convert one user entry into structured records for a personal finance app.
+The user has selected the "{mode}" entry tab. Treat that selection as authoritative.
+Entry text: {json.dumps(text)}
 
-Text to Parse: "{text}"
+Return JSON only: {{"expenses": [{{"amount": 400, "item": "item name", "category": "Specific Category", "remarks": "Specific note about this exact transaction", "paid_by": null, "needs_confirmation": false, "transaction_type": "expense"}}]}}
 
-LOGIC & REASONING RULES:
-1. **GIFT FOR vs GIFT FROM (IMPORTANT)**:
-   - "gift FOR [person]", "bought gift for [person]" = **EXPENSE** (Shopping). I'm spending money to buy a gift.
-     - Remark: "Gift for [Person]". DO NOT set paid_by.
-   - "gift FROM [person]", "got gift from [person]" = **AMBIGUOUS** (needs confirmation).
-     - Set "needs_confirmation": true with options for Gift Income or Loan.
-
-2. **PAID_BY RULES (CRITICAL)**:
-   - Set "paid_by" ONLY when text EXPLICITLY says "paid by [person]" or in loan transactions.
-   - For regular expenses like "gift for sonu", "food for party", etc. - DO NOT set paid_by.
-   - "paid_by": null for most personal expenses.
-
-3. **AMBIGUOUS CASES - ASK FOR CONFIRMATION**:
-   - If text contains "got gift", "received gift", "got money", "received money" FROM A PERSON, this is AMBIGUOUS.
-   - Set "needs_confirmation": true and provide "confirmation_options" array.
-
-4. **Clear Loans (NO AMBIGUITY)**:
-   - "borrowed", "took loan" FROM A PERSON = **LOAN (Debt)**. Amount is **NEGATIVE**.
-   - "lent", "gave loan" TO A PERSON = **LOAN GIVEN**. Amount is **POSITIVE**.
-
-5. **Clear Income (NO AMBIGUITY)**:
-   - "Salary", "Bonus", "Refund", "Incentive" = **INCOME** (Negative amount).
-
-6. **Categories (DYNAMIC)**:
-   - Use specific categories: "Shopping" (for gifts), "Food", "Utilities", etc.
-   - **Do not limit yourself to a fixed list. Create a category if it fits better.**
-
-7. **Numbers & Units**:
-   - "k" = 1,000, "Lakh"/"L" = 100,000, "Cr" = 10,000,000.
-
-8. **Formatting**:
-   - "paid_by": Set to null for personal expenses. Only set for explicit "paid by" or loan transactions.
-   - "remarks": Generate a short, clear summary e.g. "Gift for Sonu", "Lunch expense".
-
-9. **Gibberish / Invalid Text (CRITICAL)**:
-   - If the text is random keyboard mashing (e.g., "asdf 123", "asvasfvava aer 43q413") or does not logically describe a financial transaction, MUST RETURN an empty expenses array `{"expenses": []}`.
-
-Return ONLY valid JSON structure:
-Example 1 - Regular expense (gift FOR someone):
-{{
-  "expenses": [
-    {{"amount": 400, "item": "gift", "category": "Shopping", "remarks": "Gift for Sonu", "paid_by": null}}
-  ]
-}}
-
-Example 2 - Ambiguous case (gift FROM someone):
-{{
-  "expenses": [
-    {{"amount": -4000, "item": "gift from person", "category": "Other", "remarks": "Received gift from Sonu", "paid_by": "Sonu", "needs_confirmation": true, "confirmation_options": [{{"category": "Gift Income", "label": "Gift (no repayment needed)", "remarks": "Gift from Sonu"}}, {{"category": "Loan", "label": "Loan (need to repay)", "remarks": "Loan received from Sonu"}}]}}
-  ]
-}}
+Rules:
+- Extract multiple transactions when the user clearly enters more than one.
+- Understand brands, products, informal words, common Nepali/Indian usage, and small typos. Correct obvious misspellings before categorizing, e.g. "petril 500" means petrol/fuel, "cofee 80" means coffee, and "cury 400" means curry.
+- Use a useful, specific title-cased category. Create a new category when it is clearer than existing categories. Do not use Other for a recognizable item.
+- `remarks` must describe the actual item/context from the entry. Never output placeholder text such as "Short summary", "summary", "note", or "remarks". Examples: "Rice curry meal", "Mustang trip transport", "Monthly internet bill".
+- For expense mode, amount is positive and `paid_by` is null unless the text explicitly states another payer. Product words are not people. Example: "haldiram bhujiya 400" is a food/snacks expense, not a payment by Bhujiya.
+- For income mode, amount is negative, category is Income, and item identifies the source.
+- For loan mode, category is Loan and `paid_by` is the counterparty. A loan lent or given to someone is positive. Money borrowed or received from someone is negative. Repaying someone is positive. Money paid back to the user is negative.
+- In loan mode set `needs_confirmation` to true only when direction cannot be reliably identified; explicit wording such as "lent 500 to Ram", "borrowed 500 from Ram", "paid back Ram 500", or "Ram paid me back 500" does not need confirmation.
+- Use null for `paid_by` on ordinary purchases. Set it only for an explicitly named payer or a loan counterparty.
+- If there is no meaningful financial entry with an amount, return {{"expenses": []}}.
 """
-
-            
-            response = self.get_gemini_response(prompt)
+            response = self.get_nim_response(
+                prompt,
+                model=self.nim_entry_model,
+                max_tokens=700,
+                temperature=0,
+                retries=0,
+                system_prompt="detailed thinking off" if "nemotron-nano" in self.nim_entry_model else None,
+            )
             if response:
-                # Clean response and extract JSON
                 response = response.strip()
                 if response.startswith('```json'):
                     response = response[7:-3]
                 elif response.startswith('```'):
                     response = response[3:-3]
                 
-                # Find JSON in response
-                json_match = re.search(r'\{.*\}', response, re.DOTALL)
-                if json_match:
-                    json_str = json_match.group(0)
-                    parsed_data = json.loads(json_str)
-                    
-                    # Validate and fix structure
-                    if 'expenses' not in parsed_data or not parsed_data['expenses']:
-                        return {'status': 'error', 'message': "I didn't understand that transaction. Please provide a clear amount and item (e.g., '100 for tea')."}
-                        
-                    # Generate structured reply like regex parser
-                    reply_parts: list[str] = []
-                    for exp in parsed_data['expenses']:
-                        amount = exp.get('amount', 0)
-                        category = exp.get('category', 'Other')
-                        remarks = exp.get('remarks', '')
-                        needs_confirmation = exp.get('needs_confirmation', False)
-                        
-                        # Ensure category is Title Case
-                        category = category.title()
-                        exp['category'] = category
-                        
-                        # Handle confirmation cases
-                        if needs_confirmation:
-                            options = exp.get('confirmation_options', [])
-                            person = exp.get('paid_by', 'someone')
-                            options_text = " or ".join([opt.get('label', opt.get('category', '')) for opt in options])
-                            reply_parts.append(f"CONFIRM: Rs.{abs(amount)} from {person} - Is this a {options_text}?")
-                        elif amount < 0:
-                            reply_parts.append(f"SUCCESS: Added Rs.{abs(amount)} -> {category} ({remarks})")
-                        else:
-                            reply_parts.append(f"SUCCESS: Added Rs.{amount} -> {category} ({remarks})")
-                            
-                    parsed_data['reply'] = '\n'.join(reply_parts)
-                    return parsed_data
+                # Some small models append explanation after valid JSON.
+                decoder = json.JSONDecoder()
+                parsed_data = None
+                for opening in re.finditer(r"\{", response):
+                    try:
+                        candidate, _ = decoder.raw_decode(response[opening.start():])
+                        if isinstance(candidate, dict) and "expenses" in candidate:
+                            parsed_data = candidate
+                            break
+                    except json.JSONDecodeError:
+                        continue
+                if parsed_data is not None:
+                    expenses = self._normalise_nim_transactions(parsed_data.get("expenses", []), mode)
+                    if mode == "loan":
+                        expenses = self._resolve_explicit_loan_direction(expenses, text)
+                    return {
+                        "expenses": expenses,
+                        "reply": self._format_entry_reply(expenses, mode),
+                        "parsed_by": "nim",
+                        "model": self.nim_entry_model,
+                    }
             
             return None
             
@@ -1422,67 +1571,77 @@ Example 2 - Ambiguous case (gift FROM someone):
         
         try:
             processed_text = re.sub(pattern, replace_match, text, flags=re.IGNORECASE)
-            return processed_text
+            return self.parser._normalise_typos(processed_text)
         except Exception as e:
             print(f"[PREPROCESS] Error: {e}")
-            return text
+            return self.parser._normalise_typos(text)
 
-    async def parse_expense(self, text: str):
-        """Parse expense text and return structured data"""
+    def _apply_mode_to_fallback(self, expenses: list, mode: str, text: str) -> list:
+        """Make local parsing consistent with the selected entry mode."""
+        clear_loan_direction = re.search(
+            r"\b(borrow(?:ed)?|lent|lend|gave\s+loan|loan\s+to|paid\s+(?:me\s+)?back|repaid|returned|got\s+back)\b",
+            text,
+            re.IGNORECASE,
+        )
+        for expense in expenses:
+            amount = expense.get("amount", 0)
+            expense["ai_classified"] = False
+            if mode == "income":
+                expense["amount"] = -abs(amount)
+                expense["category"] = "Income"
+                expense["needs_confirmation"] = False
+            elif mode == "loan":
+                expense["category"] = "Loan"
+                expense["needs_confirmation"] = not bool(clear_loan_direction)
+            else:
+                expense["amount"] = abs(amount)
+                expense["needs_confirmation"] = False
+                if expense.get("category", "").lower() == "other":
+                    expense["category"] = "Miscellaneous"
+        return expenses
+
+    async def parse_expense(self, text: str, mode: str = "expense"):
+        """Understand a transaction entry, preferring fast NIM classification."""
         try:
-            print(f"[PARSE] Processing: {text}")
+            mode = str(mode or "expense").lower()
+            if mode not in {"expense", "income", "loan"}:
+                mode = "expense"
+            print(f"[PARSE] Processing {mode}: {text}")
             
             # Pre-process text to handle units
             text = self._preprocess_text(text)
             print(f"[PARSE] Pre-processed: {text}")
-            
-            # OPTIMIZATION: Try fast regex-based parser FIRST
-            print(f"[PARSE] Using fast rule-based parser...")
-            expenses, reply = self.parser.parse(text)
-            
-            # If regex parser succeeded with valid results, return immediately (FAST PATH)
-            if expenses:
-                # Check if any expense needs confirmation - if so, return it for user to choose
-                needs_ai = False
-                for exp in expenses:
-                    if exp.get('needs_confirmation'):
-                        # Has confirmation options, return directly for user choice
-                        print(f"[PARSE] Regex found ambiguous case, returning for confirmation")
-                        return {"expenses": expenses, "reply": reply}
-                    # Only use AI if category is 'Other' with no confirmation (truly unknown)
-                    if exp.get('category', '').lower() == 'other' and not exp.get('needs_confirmation'):
-                        needs_ai = True
-                
-                # If all expenses are well-categorized, return fast
-                if not needs_ai:
-                    print(f"[PARSE] Fast regex parsed {len(expenses)} expenses successfully")
-                    return {"expenses": expenses, "reply": reply}
-            
-            # SLOW PATH: Only use AI for complex/unknown cases
-            if self.gemini_available:
-                print(f"[PARSE] Trying AI for complex case...")
-                ai_result = await self._ai_enhanced_parse(text)
-                if ai_result and ai_result.get('expenses'):
-                    print(f"[PARSE] AI successfully parsed {len(ai_result['expenses'])} expenses")
+
+            # Entry understanding should happen before keyword rules so product names,
+            # loan direction, and useful new categories are interpreted in context.
+            if self.nim_available:
+                print(f"[PARSE] Trying fast NVIDIA NIM entry model ({self.nim_entry_model})...")
+                ai_result = await self._ai_enhanced_parse(text, mode)
+                if ai_result is not None:
+                    print(f"[PARSE] NIM parsed {len(ai_result.get('expenses', []))} entries")
                     return ai_result
-                else:
-                    print(f"[PARSE] AI parsing failed")
-            
-            # Last resort: Return regex result even if category is 'Other'
+                print("[PARSE] NIM entry parsing unavailable; using local fallback")
+
+            expenses, reply = self.parser.parse(text)
             if expenses:
-                print(f"[PARSE] Returning regex result as fallback")
-                return {"expenses": expenses, "reply": reply}
+                expenses = self._apply_mode_to_fallback(expenses, mode, text)
+                return {
+                    "expenses": expenses,
+                    "reply": self._format_entry_reply(expenses, mode),
+                    "parsed_by": "rules",
+                }
             
             # Final fallback: simple extraction
-            print(f"[PARSE] Trying simple extraction...")
+            print("[PARSE] Trying simple extraction...")
             simple_expense = self._simple_extract(text)
             if simple_expense:
-                expenses = [simple_expense]
-                reply = f"SUCCESS: Added Rs.{simple_expense['amount']} -> {simple_expense['category']} ({simple_expense['remarks']})"
+                expenses = self._apply_mode_to_fallback([simple_expense], mode, text)
+                reply = self._format_entry_reply(expenses, mode)
             
             return {
                 "expenses": expenses,
-                "reply": reply
+                "reply": reply,
+                "parsed_by": "rules",
             }
             
         except Exception as e:
@@ -1582,7 +1741,7 @@ Example 2 - Ambiguous case (gift FROM someone):
             return None
     
     async def chat_about_expenses(self, request):
-        """Handle chat requests about expenses using RAG with Gemini"""
+        """Handle questions about the user's finances using grounded NIM responses."""
         try:
             # pyre-ignore[21]
             from services.expense_analyzer import ExpenseAnalyzer
@@ -1602,32 +1761,36 @@ Example 2 - Ambiguous case (gift FROM someone):
             table_data = request.group_expenses_data if is_group_mode else (request.expenses_data or [])
             context_type = f"group '{request.group_name}'" if is_group_mode else "personal"
             
-            if not table_data:
-                response = f"Hi {user_name}! You don't have any {context_type} expenses recorded yet. Start by adding some expenses to get insights!"
-                return {"reply": response}
-            
-            # Try RAG service first (enhanced with better context)
-            if self.rag_service and self.rag_service.gemini_available:
+            # Try rich retrieval first. It also has exact-data fallbacks if NIM is unavailable.
+            if self.rag_service:
                 print(f"[CHAT] Using RAG service for query: {request.text}")
-                rag_response = await self.rag_service.query_expenses(request.text, table_data, user_name)
+                rag_response = await self.rag_service.query_expenses(
+                    request.text,
+                    table_data,
+                    user_name,
+                    getattr(request, 'conversation_history', []),
+                )
                 if rag_response:
                     print(f"[CHAT] RAG service provided response")
                     return {"reply": rag_response}
                 else:
-                    print(f"[CHAT] RAG service failed, trying legacy Gemini")
+                    print(f"[CHAT] RAG service failed, trying direct NVIDIA NIM")
             
             # Analyze expenses for fallback
             analysis = analyzer.analyze_expenses(table_data)
             
-            # Try legacy Gemini RAG if RAG service unavailable
-            if self.gemini_available and not (self.rag_service and self.rag_service.gemini_available):
-                print(f"[CHAT] Using legacy Gemini RAG")
-                gemini_response = await self._gemini_rag_query(request.text, table_data, analysis, user_name)
-                if gemini_response:
-                    return {"reply": gemini_response}
+            # Try a smaller direct prompt only if the richer service produced no response.
+            if self.nim_available:
+                print(f"[CHAT] Using direct NVIDIA NIM RAG")
+                nim_response = await self._nim_rag_query(request.text, table_data, analysis, user_name)
+                if nim_response:
+                    return {"reply": nim_response}
             
             # Fallback to rule-based processing
             print(f"[CHAT] Using rule-based analyzer")
+            if not table_data:
+                response = f"Hi {user_name}! You don't have any {context_type} transactions recorded yet. Add some records for personalized insights."
+                return {"reply": response}
             processed_response = analyzer.process_query(request.text, analysis, context_type, table_data)
             final_response = f"Hi {user_name}! {processed_response}"
             return {"reply": final_response}
@@ -1639,9 +1802,52 @@ Example 2 - Ambiguous case (gift FROM someone):
                 "reply": f"Hi {error_name}! Sorry, I encountered an error processing your question. Please try again.",
                 "error": True
             }
-    
-    async def _gemini_rag_query(self, query: str, expenses_data: list, analysis: dict, user_name: str) -> Optional[str]:
-        """Use Gemini with RAG (Retrieval Augmented Generation) for intelligent responses"""
+
+    async def explain_budget_optimizer(self, request):
+        """Explain budget optimizer output using only computed numbers."""
+        try:
+            target_reduction = int(getattr(request, 'target_reduction', 0) or 0)
+            target_savings = float(getattr(request, 'target_savings', 0) or 0)
+            achieved_cuts = float(getattr(request, 'achieved_cuts', 0) or 0)
+            suggestions = list(getattr(request, 'suggestions', []) or [])
+
+            fallback = self._budget_optimizer_fallback_explainer(
+                target_reduction,
+                target_savings,
+                achieved_cuts,
+                suggestions,
+            )
+
+            return {
+                "explanation": fallback,
+                "model": "deterministic",
+            }
+        except Exception as e:
+            print(f"[BUDGET_OPTIMIZER] Error: {e}")
+            return {
+                "explanation": self._budget_optimizer_fallback_explainer(
+                    getattr(request, 'target_reduction', 0),
+                    getattr(request, 'target_savings', 0),
+                    getattr(request, 'achieved_cuts', 0),
+                    getattr(request, 'suggestions', []),
+                ),
+                "model": "deterministic",
+            }
+
+    def _budget_optimizer_fallback_explainer(self, target_reduction, target_savings, achieved_cuts, suggestions):
+        if not suggestions:
+            return f"There is no realistic way to save {target_reduction}% from the current category totals without making very large reductions."
+
+        top = suggestions[0]
+        top_category = str(top.get('category', 'your largest category')).title()
+        top_cut = float(top.get('cutAmount', 0) or 0)
+        target_met = float(achieved_cuts or 0) >= float(target_savings or 0)
+        if target_met:
+            return f"You can save Rs.{float(achieved_cuts or 0):,.0f} and reach your {target_reduction}% goal, mainly from {top_category}."
+        return f"You can realistically save Rs.{float(achieved_cuts or 0):,.0f} of the Rs.{float(target_savings or 0):,.0f} goal, mainly from {top_category}."
+
+    async def _nim_rag_query(self, query: str, expenses_data: list, analysis: dict, user_name: str) -> Optional[str]:
+        """Use NVIDIA NIM with a compact grounded finance prompt."""
         try:
             # Prepare structured data summary
             categories_summary = "\n".join([f"  - {cat.title()}: Rs.{amount}" for cat, amount in analysis['categories'].items()])
@@ -1655,7 +1861,7 @@ Example 2 - Ambiguous case (gift FROM someone):
             ])
             
             prompt = f"""
-You are a personal finance assistant. Answer the user's question based on their financial data.
+You are a personal finance assistant. Answer questions about the user's records and general personal finance.
 
 User: {user_name}
 Query: "{query}"
@@ -1674,22 +1880,23 @@ Recent Transactions:
 {transactions_text}
 
 INSTRUCTIONS:
-1. Answer naturally and conversationally
-2. Use the exact numbers from the data provided
-3. If asked about multiple categories (e.g., "food and grocery"), combine the totals
-4. Start response with "Hi {user_name}!"
-5. Be concise but informative
-6. If data is missing, say so politely
+1. For claims about this user, use only the supplied financial data and exact numbers.
+2. For general finance questions, provide helpful educational guidance and state when it is not based on user records.
+3. If asked about multiple categories (e.g., "food and grocery"), combine the supplied totals.
+4. Never invent transactions, balances, income, goals, returns, or debt terms.
+5. Start response with "Hi {user_name}!" and be concise but informative.
+6. For high-stakes investment, tax, credit, or legal decisions, give general information and recommend qualified advice where appropriate.
+7. Format currency as Rs.X only, do not use emoji, and normally keep the response under 180 words unless details are requested.
 
 Provide a helpful, accurate response:
 """
             
-            response = self.get_gemini_response(prompt)
+            response = self.get_nim_response(prompt)
             if response:
                 return response.strip()
             
             return None
             
         except Exception as e:
-            print(f"[GEMINI_RAG] Error: {e}")
+            print(f"[NIM_RAG] Error: {e}")
             return None

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../supabase'
 import { useToast } from './Toast'
 import DeleteConfirmationModal from './ui/DeleteConfirmationModal'
+import { syncUserProfile } from '../utils/profile'
 
 export default function GroupManager({ user, currentGroup, onGroupChange, onClearChat }) {
   const [groups, setGroups] = useState([])
@@ -137,6 +138,7 @@ export default function GroupManager({ user, currentGroup, onGroupChange, onClea
 
   useEffect(() => {
     if (user) {
+      syncUserProfile(user)
       fetchGroups()
       fetchInvitations()
     }
@@ -183,6 +185,8 @@ export default function GroupManager({ user, currentGroup, onGroupChange, onClea
       .from('group_invitations')
       .update({ status: 'accepted' })
       .eq('id', invitationId)
+
+    await syncUserProfile(user)
 
     fetchGroups()
     fetchInvitations()

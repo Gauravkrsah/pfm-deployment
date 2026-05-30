@@ -485,6 +485,34 @@ class ExpenseAnalyzer:
         # LOAN QUERIES — check before item matching
         if any(word in query_lower for word in ['loan', 'lend', 'lent', 'borrow', 'owe', 'debt', 'udhar', 'own', 'payable', 'receiveable']):
             return self._handle_loan_query(query_lower, analysis, time_context, expenses_data)
+
+        # Largest/smallest individual expense queries must compare transactions, not totals.
+        wants_largest = any(word in query_lower for word in ['biggest', 'largest', 'highest', 'most expensive'])
+        wants_smallest = any(word in query_lower for word in ['smallest', 'lowest', 'least expensive'])
+        if expenses_data and (wants_largest or wants_smallest):
+            comparable_expenses = [
+                exp for exp in expenses_data
+                if exp.get('amount', 0) > 0
+                and exp.get('category', '').lower() not in ['income', 'loan']
+            ]
+            if comparable_expenses:
+                largest = max(comparable_expenses, key=lambda exp: exp.get('amount', 0))
+                smallest = min(comparable_expenses, key=lambda exp: exp.get('amount', 0))
+                parts = []
+                if wants_largest:
+                    parts.append(
+                        f"your biggest expense was Rs.{largest.get('amount', 0)} "
+                        f"for {largest.get('item', 'item')} ({largest.get('category', 'Other')})"
+                    )
+                if wants_smallest:
+                    parts.append(
+                        f"your smallest expense was Rs.{smallest.get('amount', 0)} "
+                        f"for {smallest.get('item', 'item')} ({smallest.get('category', 'Other')})"
+                    )
+                return (
+                    f"For your recorded spending{time_context}, {' and '.join(parts)}. "
+                    "Income and loans are excluded from this comparison."
+                )
         
         # ITEM-SPECIFIC QUERIES - Check these FIRST before category matching
         # This ensures "tea" matches the tea item, not the food category that contains "tea" as a keyword

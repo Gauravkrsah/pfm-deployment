@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { supabase } from '../supabase'
 import DateRangePicker, { getDateRange } from './ui/DateRangePicker'
 import { calculateMovingAverage, optimizeBudget } from '../utils/algorithms'
@@ -8,6 +8,8 @@ import {
   PieChart, Pie, Cell, 
   BarChart, Bar, Legend
 } from 'recharts'
+
+const SAVINGS_GOAL_OPTIONS = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 60, 70, 80]
 
 export default function EnhancedAnalytics({ currentGroup, user }) {
   const [stats, setStats] = useState({
@@ -21,6 +23,8 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
   const [range, setRange] = useState({ type: 'all', start: null, end: null })
   const [loading, setLoading] = useState(true)
   const [savingsGoal, setSavingsGoal] = useState(20)
+  const [isGoalMenuOpen, setIsGoalMenuOpen] = useState(false)
+  const goalMenuRef = useRef(null)
 
   const fetch = useCallback(async () => {
     setLoading(true)
@@ -98,6 +102,17 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
 
   useEffect(() => { fetch() }, [fetch])
 
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (goalMenuRef.current && !goalMenuRef.current.contains(event.target)) {
+        setIsGoalMenuOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
   const savingsRate = stats.income > 0 ? Math.round((stats.balance / stats.income) * 100) : 0
 
   const optimizerData = useMemo(() => {
@@ -112,7 +127,7 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
           category: cat,
           amount: current,
           "Target Spending": current - cut,
-          "Proposed Cut": cut
+          "Projected Savings": cut
        };
     }).sort((a,b) => b.amount - a.amount);
   }, [algorithms.optimization, stats.categories]);
@@ -132,6 +147,11 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
   const trendsExplainer = useMemo(() => {
     if (!algorithms.trends || algorithms.trends.movingAverageData.length === 0) return "Add more daily expenses to see your spending trends and moving averages.";
     const { avgDailySpend, highestDay } = algorithms.trends;
+    const dayCount = algorithms.trends.movingAverageData.length;
+    
+    if (dayCount === 1) {
+      return `Only one spending day is in this range, so the daily average and highest day are both Rs.${Math.round(avgDailySpend).toLocaleString()}. Add more days to see a real trend.`;
+    }
     
     if (highestDay > avgDailySpend * 3 && avgDailySpend > 0) {
       return `Your average daily spend is Rs.${Math.round(avgDailySpend).toLocaleString()}, but you have significant outliers (like a peak of Rs.${Math.round(highestDay).toLocaleString()}). The moving average line on the graph will help you see your underlying trend despite these spikes.`;
@@ -139,21 +159,23 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
     return `Your average daily spend is Rs.${Math.round(avgDailySpend).toLocaleString()}. The moving average line on the graph smooths out daily variations to show your true spending trajectory.`;
   }, [algorithms.trends]);
 
-  const optimizerExplainer = useMemo(() => {
+  const fallbackOptimizerExplainer = useMemo(() => {
     if (!algorithms.optimization || stats.expense === 0) return "Categorize your expenses so we can spot places where you can save.";
     const { achievedCuts, suggestions, targetSavings } = algorithms.optimization;
     
-    if (suggestions.length === 0) return `You don't have much room to cut. A ${savingsGoal}% reduction is too steep for your current spending habits.`;
+    if (suggestions.length === 0) return `There is no realistic way to save ${savingsGoal}% from these category totals without very large reductions.`;
     
     const topCat = suggestions[0]?.category;
+    const topCut = suggestions[0]?.cutAmount || 0;
     const isTargetMet = achievedCuts >= targetSavings;
     
     if (isTargetMet) {
-      return `You can actually hit that ${savingsGoal}% goal. If you cut back Rs.${achievedCuts.toLocaleString()} mostly from '${topCat}' and a few other non-essentials, you'll reach your target.`;
+      return `You can save Rs.${achievedCuts.toLocaleString()} and reach the Rs.${targetSavings.toLocaleString()} goal, mainly from ${topCat} (Rs.${topCut.toLocaleString()}).`;
     } else {
-      return `We found Rs.${achievedCuts.toLocaleString()} you could save, mostly by spending less on '${topCat}'. It's not quite the ${savingsGoal}% you asked for, but it's a realistic start based on your habits.`;
+      return `You can realistically save Rs.${achievedCuts.toLocaleString()} of the Rs.${targetSavings.toLocaleString()} goal, mainly from ${topCat} (Rs.${topCut.toLocaleString()}).`;
     }
   }, [algorithms.optimization, stats.expense, savingsGoal]);
+  const optimizerExplainer = fallbackOptimizerExplainer
 
   const breakdownExplainer = useMemo(() => {
     if (!stats.expense) return "Categorize your transactions to see your expense breakdown.";
@@ -341,52 +363,92 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
               <span className="p-2 bg-emerald-50 dark:bg-emerald-900/30 rounded-xl text-emerald-600 dark:text-emerald-400">🎯</span>
               Budget Optimizer
             </h4>
-            <div className="flex items-center gap-3">
-               <label className="text-sm font-medium text-gray-600 dark:text-gray-300">Target Reduction:</label>
-               <select
-                 value={savingsGoal}
-                 onChange={e => setSavingsGoal(Number(e.target.value))}
-                 className="text-sm font-bold bg-gray-50 dark:bg-paper-300 border border-emerald-200 dark:border-emerald-700 text-emerald-800 dark:text-emerald-200 rounded-lg px-3 py-1.5 cursor-pointer outline-none focus:ring-2 focus:ring-emerald-400"
-               >
-                 {[5,10,15,20,25,30,35,40,45,50,60,70,80].map(v => (
-                   <option key={v} value={v}>{v}% Cut</option>
-                 ))}
-               </select>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+               <label className="text-sm font-semibold text-gray-700 dark:text-gray-300">Savings Goal</label>
+               <div className="relative w-full sm:w-44" ref={goalMenuRef}>
+                 <button
+                   type="button"
+                   onClick={() => setIsGoalMenuOpen(open => !open)}
+                   className={`w-full flex items-center justify-between gap-3 rounded-xl border px-4 py-2.5 text-sm font-bold transition-all ${isGoalMenuOpen
+                     ? 'border-emerald-400 bg-emerald-50 text-emerald-900 shadow-lg shadow-emerald-500/10 ring-4 ring-emerald-500/10 dark:bg-emerald-900/20 dark:text-emerald-100'
+                     : 'border-emerald-200 bg-white text-emerald-800 hover:border-emerald-300 hover:bg-emerald-50/70 dark:border-emerald-800 dark:bg-paper-300 dark:text-emerald-100 dark:hover:bg-paper-400'
+                   }`}
+                   aria-haspopup="listbox"
+                   aria-expanded={isGoalMenuOpen}
+                 >
+                   <span>Save {savingsGoal}%</span>
+                   <svg className={`w-4 h-4 transition-transform ${isGoalMenuOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                   </svg>
+                 </button>
+
+                 {isGoalMenuOpen && (
+                   <div className="absolute left-0 right-0 top-full z-40 mt-2 overflow-hidden rounded-xl border border-emerald-100 bg-white shadow-2xl shadow-emerald-950/10 dark:border-emerald-900 dark:bg-paper-200">
+                     <div className="max-h-64 overflow-y-auto p-1.5 scrollbar-thin" role="listbox">
+                       {SAVINGS_GOAL_OPTIONS.map(v => (
+                         <button
+                           key={v}
+                           type="button"
+                           onClick={() => {
+                             setSavingsGoal(v)
+                             setIsGoalMenuOpen(false)
+                           }}
+                           className={`w-full flex items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-semibold transition-colors ${savingsGoal === v
+                             ? 'bg-emerald-600 text-white shadow-sm'
+                             : 'text-gray-700 hover:bg-emerald-50 hover:text-emerald-800 dark:text-gray-200 dark:hover:bg-paper-300 dark:hover:text-emerald-100'
+                           }`}
+                           role="option"
+                           aria-selected={savingsGoal === v}
+                         >
+                           <span>Save {v}%</span>
+                           {savingsGoal === v && (
+                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                             </svg>
+                           )}
+                         </button>
+                       ))}
+                     </div>
+                   </div>
+                 )}
+               </div>
             </div>
             
-            <p className="text-sm text-gray-600 dark:text-gray-300 mt-2">
-              {optimizerExplainer}
-            </p>
+            <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-4 text-sm text-gray-700 dark:border-emerald-900/50 dark:bg-emerald-900/10 dark:text-gray-200">
+              <p className="leading-relaxed">
+                {optimizerExplainer}
+              </p>
+            </div>
 
             {algorithms.optimization && stats.expense > 0 ? (() => {
               const { targetSavings, achievedCuts, suggestions } = algorithms.optimization;
               return (
                  <div className="mt-2 bg-emerald-50 dark:bg-emerald-900/10 rounded-xl p-5 border border-emerald-100 dark:border-emerald-800/30">
-                    <div className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 mb-2 uppercase tracking-wide">Optimization Results</div>
+                    <div className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 mb-2 uppercase tracking-wide">Savings Plan</div>
                     <div className="space-y-3">
                       <div className="flex justify-between items-center text-sm">
                          <span className="text-gray-600 dark:text-gray-400">Target Savings:</span>
                          <span className="font-bold text-gray-900 dark:text-gray-100">Rs.{targetSavings.toLocaleString()}</span>
                       </div>
                       <div className="flex justify-between items-center text-sm">
-                         <span className="text-gray-600 dark:text-gray-400">Achievable Cuts:</span>
+                         <span className="text-gray-600 dark:text-gray-400">Possible Savings:</span>
                          <span className="font-bold text-emerald-600 dark:text-emerald-400">Rs.{achievedCuts.toLocaleString()}</span>
                       </div>
                     </div>
                     {suggestions.length > 0 ? (
                        <div className="mt-4 pt-4 border-t border-emerald-200/50 dark:border-emerald-800/50">
-                          <div className="text-xs font-bold text-emerald-800 dark:text-emerald-300 mb-2">Recommended Category Cuts:</div>
+                          <div className="text-xs font-bold text-emerald-800 dark:text-emerald-300 mb-2">Recommended Savings:</div>
                           <ul className="space-y-2 text-sm max-h-[140px] overflow-y-auto scrollbar-thin pr-2">
                              {suggestions.map((sug, i) => (
                                 <li key={i} className="flex justify-between items-center py-0.5">
                                    <span className="capitalize">{sug.category}</span>
-                                   <span className="text-emerald-600 font-semibold">-Rs.{sug.cutAmount.toLocaleString()}</span>
+                                   <span className="text-emerald-600 font-semibold">Save Rs.{sug.cutAmount.toLocaleString()}</span>
                                 </li>
                              ))}
                           </ul>
                        </div>
                     ) : (
-                       <div className="mt-4 text-sm text-emerald-600">No cuts needed at this level!</div>
+                       <div className="mt-4 text-sm text-emerald-600">No extra savings needed at this level.</div>
                     )}
                  </div>
               )
@@ -406,7 +468,7 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                    <RechartsTooltip content={<CustomTooltip />} cursor={{fill: 'transparent'}} />
                    <Legend wrapperStyle={{fontSize: 12}} />
                    <Bar dataKey="Target Spending" stackId="a" fill="#10b981" radius={[0, 0, 4, 4]} />
-                   <Bar dataKey="Proposed Cut" stackId="a" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                   <Bar dataKey="Projected Savings" stackId="a" fill="#f59e0b" radius={[4, 4, 0, 0]} />
                  </BarChart>
                </ResponsiveContainer>
             ) : (

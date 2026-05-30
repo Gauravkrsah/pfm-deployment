@@ -18,6 +18,13 @@ const INPUT_MODES = [
   { id: 'loan', label: 'Loan', icon: ArrowLeftRight, placeholder: 'e.g., lent 1000 to Ram', hint: 'e.g., "lent 1000 to Ram" or "borrowed 500 from Sita"', emoji: '🤝', desc: 'Track loans and borrowings' },
 ]
 
+const INPUT_MODE_STORAGE_KEY = 'pfm_input_mode'
+
+const getSavedInputMode = () => {
+  const savedMode = localStorage.getItem(INPUT_MODE_STORAGE_KEY)
+  return INPUT_MODES.some(mode => mode.id === savedMode) ? savedMode : 'expense'
+}
+
 const MODE_STYLES = {
   chat: {
     active: 'bg-gray-900 dark:bg-white/10 text-white dark:text-white border border-gray-800 dark:border-white/10 shadow-sm',
@@ -49,7 +56,149 @@ const MODE_STYLES = {
   },
 }
 
-export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGroup, isVisible = true, compact = false, onClearChat, activeTab, showMessagesArea = true }) {
+const renderInlineContent = (text) => {
+  const tokens = String(text).split(/(\*\*[^*]+\*\*|`[^`]+`)/g).filter(Boolean)
+
+  return tokens.map((token, index) => {
+    if (token.startsWith('**') && token.endsWith('**')) {
+      return <strong key={index} className="font-semibold text-gray-950 dark:text-white">{token.slice(2, -2)}</strong>
+    }
+    if (token.startsWith('`') && token.endsWith('`')) {
+      return <code key={index} className="rounded bg-black/5 dark:bg-white/10 px-1.5 py-0.5 text-[0.92em]">{token.slice(1, -1)}</code>
+    }
+    return <span key={index}>{token}</span>
+  })
+}
+
+const isTableDivider = (line) => /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line)
+
+const splitTableRow = (line) => line
+  .trim()
+  .replace(/^\|/, '')
+  .replace(/\|$/, '')
+  .split('|')
+  .map(cell => cell.trim())
+
+const renderAssistantMessage = (text) => {
+  const lines = String(text || '').replace(/\r\n?/g, '\n').split('\n')
+  const blocks = []
+  let index = 0
+
+  while (index < lines.length) {
+    const line = lines[index]
+    const trimmed = line.trim()
+
+    if (!trimmed) {
+      index += 1
+      continue
+    }
+
+    const heading = trimmed.match(/^(#{1,4})\s+(.+)$/)
+    if (heading) {
+      blocks.push(
+        <h3 key={`heading-${index}`} className="pt-1 text-[15px] sm:text-base font-semibold tracking-tight text-gray-950 dark:text-white">
+          {renderInlineContent(heading[2])}
+        </h3>
+      )
+      index += 1
+      continue
+    }
+
+    if (index + 1 < lines.length && trimmed.includes('|') && isTableDivider(lines[index + 1])) {
+      const headers = splitTableRow(line)
+      const rows = []
+      index += 2
+      while (index < lines.length && lines[index].trim().includes('|') && lines[index].trim()) {
+        rows.push(splitTableRow(lines[index]))
+        index += 1
+      }
+      blocks.push(
+        <div key={`table-${index}`} className="overflow-x-auto rounded-xl border border-gray-200/70 dark:border-white/10">
+          <table className="min-w-full text-left text-xs sm:text-sm">
+            <thead className="bg-gray-50 dark:bg-white/[0.04] text-gray-600 dark:text-gray-300">
+              <tr>
+                {headers.map((header, cellIndex) => (
+                  <th key={cellIndex} className="px-3 py-2.5 font-semibold">{renderInlineContent(header)}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200/70 dark:divide-white/10">
+              {rows.map((row, rowIndex) => (
+                <tr key={rowIndex}>
+                  {row.map((cell, cellIndex) => (
+                    <td key={cellIndex} className="px-3 py-2 text-gray-700 dark:text-gray-200">{renderInlineContent(cell)}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )
+      continue
+    }
+
+    const bulletMatch = trimmed.match(/^[-*]\s+(.+)$/)
+    if (bulletMatch) {
+      const items = []
+      while (index < lines.length) {
+        const match = lines[index].trim().match(/^[-*]\s+(.+)$/)
+        if (!match) break
+        items.push(match[1])
+        index += 1
+      }
+      blocks.push(
+        <ul key={`bullets-${index}`} className="space-y-1.5 pl-5 list-disc marker:text-gray-400 dark:marker:text-gray-500">
+          {items.map((item, itemIndex) => (
+            <li key={itemIndex} className="pl-1">{renderInlineContent(item)}</li>
+          ))}
+        </ul>
+      )
+      continue
+    }
+
+    const numberedMatch = trimmed.match(/^\d+\.\s+(.+)$/)
+    if (numberedMatch) {
+      const items = []
+      while (index < lines.length) {
+        const match = lines[index].trim().match(/^\d+\.\s+(.+)$/)
+        if (!match) break
+        items.push(match[1])
+        index += 1
+      }
+      blocks.push(
+        <ol key={`numbered-${index}`} className="space-y-1.5 pl-5 list-decimal marker:font-semibold marker:text-gray-500 dark:marker:text-gray-400">
+          {items.map((item, itemIndex) => (
+            <li key={itemIndex} className="pl-1">{renderInlineContent(item)}</li>
+          ))}
+        </ol>
+      )
+      continue
+    }
+
+    const paragraphLines = [trimmed]
+    index += 1
+    while (index < lines.length && lines[index].trim()) {
+      const next = lines[index].trim()
+      if (/^(#{1,4})\s+/.test(next) || /^[-*]\s+/.test(next) || /^\d+\.\s+/.test(next)) break
+      if (index + 1 < lines.length && next.includes('|') && isTableDivider(lines[index + 1])) break
+      paragraphLines.push(next)
+      index += 1
+    }
+    blocks.push(
+      <p key={`paragraph-${index}`} className="leading-6 sm:leading-7">
+        {renderInlineContent(paragraphLines.join(' '))}
+      </p>
+    )
+  }
+
+  return (
+    <div className="space-y-3.5 text-sm sm:text-[15px] text-gray-800 dark:text-gray-100">
+      {blocks}
+    </div>
+  )
+}
+
+export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGroup, isVisible = true, compact = false, onClearChat, showMessagesArea = true }) {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [messages, setMessages] = useState(() => {
@@ -67,20 +216,11 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
   const [animating, setAnimating] = useState(false)
   const touchStartX = useRef(null)
 
-  // Derive inputMode from activeTab
-  const getDefaultMode = (tab) => {
-    if (tab === 'expenses') return 'expense'
-    if (tab === 'income') return 'income'
-    if (tab === 'loans') return 'loan'
-    return 'expense'
-  }
+  const [inputMode, setInputMode] = useState(getSavedInputMode)
 
-  const [inputMode, setInputMode] = useState(() => getDefaultMode(activeTab))
-
-  // Sync inputMode when activeTab changes
   useEffect(() => {
-    setInputMode(getDefaultMode(activeTab))
-  }, [activeTab])
+    localStorage.setItem(INPUT_MODE_STORAGE_KEY, inputMode)
+  }, [inputMode])
 
   // Update sliding indicator position whenever inputMode changes
   useEffect(() => {
@@ -193,20 +333,6 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
       }
     }
 
-    // Validate chat mode: reject gibberish (no real words)
-    if (inputMode === 'chat') {
-      const words = input.trim().split(/\s+/).filter(w => w.length >= 2)
-      const hasRealWord = words.some(w => isRealWord(w))
-      if (!hasRealWord) {
-        setMessages(prev => [...prev,
-        { type: 'user', text: input, mode: inputMode },
-        { type: 'bot', text: "I didn't understand that. Try asking something like \"how much did I spend this month?\" or \"what's my top expense?\"" }
-        ])
-        setInput('')
-        return
-      }
-    }
-
     const userMsg = input
     setMessages(prev => [...prev, { type: 'user', text: userMsg, mode: inputMode }])
     setInput('')
@@ -223,7 +349,14 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
           text: userMsg,
           user_id: currentUser?.id,
           user_email: currentUser?.email,
-          user_name: userName
+          user_name: userName,
+          conversation_history: messages
+            .filter(message => (message.type === 'user' || message.type === 'bot') && typeof message.text === 'string')
+            .slice(-8)
+            .map(message => ({
+              role: message.type === 'user' ? 'user' : 'assistant',
+              content: message.text
+            }))
         }
 
         if (currentGroup) {
@@ -238,32 +371,32 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
 
       } else if (inputMode === 'expense') {
         // Expense mode — parse and save as expense
-        const response = await axios.post(`${getApiBaseUrl()}/api/expenses/parse`, { text: userMsg })
+        const response = await axios.post(`${getApiBaseUrl()}/api/expenses/parse`, { text: userMsg, mode: 'expense' })
         const { expenses, reply } = response.data
-        setMessages(prev => [...prev, { type: 'bot', text: reply }])
 
         if (expenses && expenses.length > 0) {
-          const hasAmbiguous = expenses.some(exp => exp.category === 'Other')
+          const hasAmbiguous = expenses.some(exp => exp.needs_confirmation || (!exp.ai_classified && exp.category === 'Other'))
 
           if (hasAmbiguous) {
             setPendingTransactions({ expenses, forceMode: 'expense' })
             setMessages(prev => [...prev, {
               type: 'confirmation',
-              text: `Choose a category for this expense:`,
+              text: reply || 'Choose a category for this expense:',
               expenses: expenses,
               confirmMode: 'expense'
             }])
           } else {
             await onExpenseAdded(expenses)
-            setMessages(prev => [...prev, { type: 'bot', text: '✓ Saved' }])
+            setMessages(prev => [...prev, { type: 'bot', text: reply || 'Saved expense.' }])
           }
+        } else {
+          setMessages(prev => [...prev, { type: 'bot', text: reply || 'I could not understand that expense. Include an item and amount.' }])
         }
 
       } else if (inputMode === 'income') {
         // Income mode — parse and save as income (negative amount)
-        const response = await axios.post(`${getApiBaseUrl()}/api/expenses/parse`, { text: userMsg })
+        const response = await axios.post(`${getApiBaseUrl()}/api/expenses/parse`, { text: userMsg, mode: 'income' })
         const { expenses, reply } = response.data
-        setMessages(prev => [...prev, { type: 'bot', text: reply }])
 
         if (expenses && expenses.length > 0) {
           const incomeExpenses = expenses.map(exp => ({
@@ -273,14 +406,15 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
             remarks: exp.remarks || `Income: ${exp.item}`
           }))
           await onExpenseAdded(incomeExpenses)
-          setMessages(prev => [...prev, { type: 'bot', text: '✓ Saved as Income' }])
+          setMessages(prev => [...prev, { type: 'bot', text: reply || 'Saved income.' }])
+        } else {
+          setMessages(prev => [...prev, { type: 'bot', text: reply || 'I could not understand that income entry. Include a source and amount.' }])
         }
 
       } else if (inputMode === 'loan') {
         // Loan mode — parse and enter loan confirmation flow
-        const response = await axios.post(`${getApiBaseUrl()}/api/expenses/parse`, { text: userMsg })
+        const response = await axios.post(`${getApiBaseUrl()}/api/expenses/parse`, { text: userMsg, mode: 'loan' })
         const { expenses, reply } = response.data
-        setMessages(prev => [...prev, { type: 'bot', text: reply }])
 
         if (expenses && expenses.length > 0) {
           // Try to extract person name
@@ -300,18 +434,30 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
           }
 
           const updatedExpenses = expenses.map(e => ({ ...e, paid_by: person, category: 'Loan' }))
-          setPendingTransactions({ expenses: updatedExpenses, forceMode: 'loan' })
+          const needsConfirmation = updatedExpenses.some(exp => exp.needs_confirmation)
 
-          setMessages(prev => [...prev, {
-            type: 'confirmation',
-            text: person ? `Transaction with ${person}. What type?` : `What type of loan transaction?`,
-            expenses: updatedExpenses,
-            confirmMode: 'loan'
-          }])
+          if (needsConfirmation) {
+            setPendingTransactions({ expenses: updatedExpenses, forceMode: 'loan' })
+            setMessages(prev => [...prev, {
+              type: 'confirmation',
+              text: reply || (person ? `Transaction with ${person}. What type?` : 'What type of loan transaction?'),
+              expenses: updatedExpenses,
+              confirmMode: 'loan'
+            }])
+          } else {
+            await onExpenseAdded(updatedExpenses)
+            setMessages(prev => [...prev, { type: 'bot', text: reply || 'Saved loan transaction.' }])
+          }
+        } else {
+          setMessages(prev => [...prev, { type: 'bot', text: reply || 'I could not understand that loan entry. Include the amount and person.' }])
         }
       }
     } catch (error) {
-      setMessages(prev => [...prev, { type: 'bot', text: 'Error: Unable to process request' }])
+      const serverMessage = error.response?.data?.detail || error.response?.data?.reply
+      const errorText = serverMessage
+        ? `Unable to answer right now: ${serverMessage}`
+        : 'Unable to reach the finance assistant right now. Please try again.'
+      setMessages(prev => [...prev, { type: 'bot', text: errorText }])
     } finally {
       setLoading(false)
     }
@@ -497,9 +643,9 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
                         {renderConfirmation(msg)}
                       </div>
                     ) : (
-                      <div className={`max-w-[80%] lg:max-w-[70%] px-4 py-2.5 rounded-2xl text-sm whitespace-pre-wrap ${msg.type === 'user' ? 'bg-black dark:bg-white text-white dark:text-black' : 'bg-gray-100 dark:bg-paper-200 text-gray-900 dark:text-gray-100'}`}>
-                        {msg.type === 'user' && msg.mode && getModeBadge(msg.mode)}
-                        <div>{msg.text}</div>
+                      <div className={`${msg.type === 'user' ? 'max-w-[80%] lg:max-w-[60%] px-4 py-2.5 bg-black dark:bg-white text-white dark:text-black text-sm whitespace-pre-wrap' : 'max-w-[94%] lg:max-w-[76%] px-5 sm:px-6 py-4 sm:py-5 bg-gray-100 dark:bg-paper-200 text-gray-900 dark:text-gray-100'} rounded-2xl`}>
+                        {msg.type === 'user' && msg.mode && msg.mode !== 'chat' && getModeBadge(msg.mode)}
+                        {msg.type === 'bot' ? renderAssistantMessage(msg.text) : <div>{msg.text}</div>}
                       </div>
                     )}
                   </div>

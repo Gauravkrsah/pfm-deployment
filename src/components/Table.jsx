@@ -18,6 +18,28 @@ const CATEGORIES = [
   'Other'
 ]
 
+const PLACEHOLDER_REMARKS = new Set(['short summary', 'summary', 'brief summary', 'note', 'remarks', 'n/a', 'na', '-'])
+
+function getDisplayRemarks(expense) {
+  const remarks = (expense.remarks || '').trim()
+  if (remarks && !PLACEHOLDER_REMARKS.has(remarks.toLowerCase())) {
+    return remarks
+  }
+
+  const item = expense.item || 'transaction'
+  const category = (expense.category || '').toLowerCase()
+
+  if (category === 'food') return `Food: ${item}`
+  if (category === 'transportation' || category === 'transport') return `Travel expense: ${item}`
+  if (category === 'groceries') return `Grocery: ${item}`
+  if (category === 'utilities') return `Utility payment: ${item}`
+  if (category === 'shopping') return `Purchased ${item}`
+  if (category === 'entertainment') return `Entertainment: ${item}`
+  if (category === 'education') return `Education: ${item}`
+
+  return item
+}
+
 const Table = forwardRef(({ expenses, onExpenseUpdate, currentGroup, user }, ref) => {
   const [data, setData] = useState([])
   const [filteredData, setFilteredData] = useState([])
@@ -276,39 +298,42 @@ const Table = forwardRef(({ expenses, onExpenseUpdate, currentGroup, user }, ref
                 <td colSpan="7" className="p-8 text-center text-gray-500">No expenses found.</td>
               </tr>
             ) : (
-              filteredData.map((expense) => (
-                <tr key={expense.id} className="hover:bg-paper-50/50 dark:hover:bg-paper-300/20 transition-colors group">
-                  <td className="p-4 text-gray-600 dark:text-gray-300 text-sm whitespace-nowrap">{new Date(expense.date).toLocaleDateString()}</td>
-                  <td className="p-4 font-medium text-gray-900 dark:text-gray-100 text-sm">{expense.item}</td>
-                  <td className="p-4">
-                    <span className="px-3 py-1 bg-paper-100 dark:bg-paper-300 text-gray-700 dark:text-gray-200 rounded-full text-xs font-medium border border-paper-200 dark:border-paper-400/50 whitespace-nowrap">
-                      {expense.category}
-                    </span>
-                  </td>
-                  <td className="p-4 font-bold text-gray-900 dark:text-gray-100 text-sm">
-                    Rs.{expense.amount.toLocaleString()}
-                  </td>
-                  <td className="p-4 text-gray-700 dark:text-gray-300 text-sm max-w-[200px] truncate" title={expense.remarks || ''}>
-                    {expense.remarks || '-'}
-                  </td>
-                  <td className="p-4 text-gray-500 text-xs">
-                    {(() => {
-                      const userId = expense.user_id
-                      if (userId && userProfiles[userId]) {
-                        const profile = userProfiles[userId]
-                        return profile.full_name || profile.email?.split('@')[0] || 'Unknown'
-                      }
-                      return expense.added_by || expense.user_name || 'Unknown'
-                    })()}
-                  </td>
-                  <td className="p-4 text-right">
-                    <div className="flex justify-end gap-3">
-                      <button onClick={() => setItemToEdit(expense)} className="text-blue-600 hover:text-blue-800 font-medium text-sm">Edit</button>
-                      <button onClick={() => setItemToDelete(expense)} className="text-red-600 hover:text-red-800 font-medium text-sm">Delete</button>
-                    </div>
-                  </td>
-                </tr>
-              ))
+              filteredData.map((expense) => {
+                const displayRemarks = getDisplayRemarks(expense)
+                return (
+                  <tr key={expense.id} className="hover:bg-paper-50/50 dark:hover:bg-paper-300/20 transition-colors group">
+                    <td className="p-4 text-gray-600 dark:text-gray-300 text-sm whitespace-nowrap">{new Date(expense.date).toLocaleDateString()}</td>
+                    <td className="p-4 font-medium text-gray-900 dark:text-gray-100 text-sm">{expense.item}</td>
+                    <td className="p-4">
+                      <span className="px-3 py-1 bg-paper-100 dark:bg-paper-300 text-gray-700 dark:text-gray-200 rounded-full text-xs font-medium border border-paper-200 dark:border-paper-400/50 whitespace-nowrap">
+                        {expense.category}
+                      </span>
+                    </td>
+                    <td className="p-4 font-bold text-gray-900 dark:text-gray-100 text-sm">
+                      Rs.{expense.amount.toLocaleString()}
+                    </td>
+                    <td className="p-4 text-gray-700 dark:text-gray-300 text-sm max-w-[200px] truncate" title={displayRemarks}>
+                      {displayRemarks || '-'}
+                    </td>
+                    <td className="p-4 text-gray-500 text-xs">
+                      {(() => {
+                        const userId = expense.user_id
+                        if (userId && userProfiles[userId]) {
+                          const profile = userProfiles[userId]
+                          return profile.full_name || profile.email?.split('@')[0] || 'Unknown'
+                        }
+                        return expense.added_by || expense.user_name || 'Unknown'
+                      })()}
+                    </td>
+                    <td className="p-4 text-right">
+                      <div className="flex justify-end gap-3">
+                        <button onClick={() => setItemToEdit(expense)} className="text-blue-600 hover:text-blue-800 font-medium text-sm">Edit</button>
+                        <button onClick={() => setItemToDelete(expense)} className="text-red-600 hover:text-red-800 font-medium text-sm">Delete</button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })
             )}
           </tbody>
           <tfoot>
@@ -328,7 +353,9 @@ const Table = forwardRef(({ expenses, onExpenseUpdate, currentGroup, user }, ref
         ) : filteredData.length === 0 ? (
           <div className="p-8 text-center text-gray-500">No expenses found.</div>
         ) : (
-          filteredData.map((expense) => (
+          filteredData.map((expense) => {
+            const displayRemarks = getDisplayRemarks(expense)
+            return (
             <div key={expense.id} className="bg-white dark:bg-paper-200 p-4 rounded-2xl border border-paper-100 dark:border-paper-300/50 shadow-sm relative overflow-hidden group">
               {/* View Mode Mobile */}
               <div className="relative z-10">
@@ -359,9 +386,9 @@ const Table = forwardRef(({ expenses, onExpenseUpdate, currentGroup, user }, ref
                   </span>
                 </div>
 
-                {expense.remarks && (
+                {displayRemarks && (
                   <div className="text-sm text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-paper-300/30 p-2.5 rounded-xl border border-gray-100 dark:border-paper-300 mb-3 truncate">
-                    {expense.remarks}
+                    {displayRemarks}
                   </div>
                 )}
 
@@ -377,7 +404,8 @@ const Table = forwardRef(({ expenses, onExpenseUpdate, currentGroup, user }, ref
                 </div>
               </div>
             </div>
-          ))
+            )
+          })
         )}
       </div>
 
@@ -428,6 +456,7 @@ const Table = forwardRef(({ expenses, onExpenseUpdate, currentGroup, user }, ref
               <div>
                 <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider">Category</label>
                 <select value={itemToEdit.category} onChange={(e) => setItemToEdit({ ...itemToEdit, category: e.target.value })} className="w-full px-4 py-3 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm text-gray-900 dark:text-white appearance-none">
+                  {itemToEdit.category && !CATEGORIES.includes(itemToEdit.category) && <option value={itemToEdit.category}>{itemToEdit.category}</option>}
                   {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
