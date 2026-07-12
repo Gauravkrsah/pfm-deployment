@@ -391,6 +391,7 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
   })
   const [expensesData, setExpensesData] = useState([])
   const [pendingTransactions, setPendingTransactions] = useState(null)
+  const [pendingIntent, setPendingIntent] = useState(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [attachment, setAttachment] = useState(null)
   const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false)
@@ -423,6 +424,7 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
   const isRecordingRef = useRef(false)
   const recordingPurposeRef = useRef('attachment')
   const processingAbortRef = useRef(null)
+  const confirmedIntentRef = useRef(null)
   const messageSequenceRef = useRef(0)
   const handleSubmitRef = useRef(null)
   const startAudioRecordingRef = useRef(null)
@@ -1111,7 +1113,11 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
     let mediaTransactions = []
     let mediaSummary = ''
     let mediaIntent = null
-    let resolvedMode = inputMode
+    const confirmedIntent = confirmedIntentRef.current?.text === originalText
+      ? confirmedIntentRef.current.mode
+      : null
+    if (confirmedIntent) confirmedIntentRef.current = null
+    let resolvedMode = confirmedIntent || inputMode
 
     processingAbortRef.current = controller
     setLoading(true)
@@ -1198,9 +1204,10 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
       return
     }
 
-    // A manually selected transaction tab with an amount is authoritative.
-    // Skipping the separate intent request leaves only the single NIM parse.
-    const shouldClassifyIntent = autoIntentEnabled && (inputMode === 'chat' || !/\d/.test(userMsg))
+    // When intent detection is enabled it is authoritative, including when a
+    // transaction tab was selected previously. Turning it off preserves the
+    // manually selected mode.
+    const shouldClassifyIntent = autoIntentEnabled && !confirmedIntent
     if (shouldClassifyIntent) {
       if (mediaIntent) {
         resolvedMode = mediaIntent
@@ -1210,6 +1217,19 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
             text: userMsg,
             current_mode: inputMode,
           }, { signal: controller.signal })
+          if (response.data?.needs_confirmation) {
+            const candidates = Array.isArray(response.data?.candidates)
+              ? response.data.candidates.filter(candidate => ['expense', 'income', 'loan'].includes(candidate))
+              : ['expense', 'income', 'loan']
+            setPendingIntent({ text: userMsg, candidates })
+            setMessages(prev => [...prev, {
+              type: 'confirmation',
+              confirmMode: 'intent',
+              text: response.data?.reason || 'I’m not certain what kind of transaction this is. Please confirm before I save it.',
+            }])
+            finishProcessing()
+            return
+          }
           if (INPUT_MODES.some(mode => mode.id === response.data?.intent)) {
             resolvedMode = response.data.intent
           }
@@ -1677,11 +1697,49 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
 
   const handleCancelPending = () => {
     setPendingTransactions(null)
-    setMessages(prev => [...prev, { type: 'bot', text: '✗ Cancelled' }])
+    setPendingIntent(null)
+    setMessages(prev => [...prev, { type: 'bot', text: 'No problem—I did not save anything.' }])
+  }
+
+  const handleIntentChoice = (mode) => {
+    if (!pendingIntent) return
+    setInputMode(mode)
+    setInput(pendingIntent.text)
+    confirmedIntentRef.current = { text: pendingIntent.text, mode }
+    setPendingIntent(null)
+    setMessages(prev => [...prev, {
+      type: 'bot',
+      text: `Got it—I've selected ${mode}. Review the entry, then press send to save it.`,
+    }])
+    window.setTimeout(() => inputRef.current?.focus(), 0)
   }
 
   // Render confirmation buttons based on mode
   const renderConfirmation = (msg) => {
+    if (msg.confirmMode === 'intent') {
+      const labels = {
+        expense: 'This was an expense',
+        income: 'This was income or a gift',
+        loan: 'This was a loan or repayment',
+      }
+      const candidates = pendingIntent?.candidates || ['expense', 'income', 'loan']
+      return (
+        <div className="flex flex-col gap-2 mt-3">
+          <p className="text-xs text-gray-600 dark:text-gray-300">I won’t save anything until you choose.</p>
+          <div className="flex flex-wrap gap-2">
+            {candidates.map(mode => (
+              <button key={mode} type="button" onClick={() => handleIntentChoice(mode)} className="px-3 py-2 text-xs font-semibold rounded-xl bg-white dark:bg-paper-300 text-gray-800 dark:text-gray-100 border border-amber-200 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors">
+                {labels[mode]}
+              </button>
+            ))}
+          </div>
+          <button type="button" onClick={handleCancelPending} className="px-3 py-1.5 text-xs font-medium bg-gray-100 dark:bg-paper-300 text-gray-600 dark:text-gray-300 rounded-full hover:bg-gray-200 dark:hover:bg-paper-400 transition-colors self-start">
+            Cancel
+          </button>
+        </div>
+      )
+    }
+
     if (msg.confirmMode === 'media') {
       const reviewTransactions = pendingTransactions?.forceMode === 'media'
         ? pendingTransactions.expenses

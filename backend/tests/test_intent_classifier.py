@@ -15,6 +15,20 @@ class IntentClassifierTest(unittest.TestCase):
     def test_terse_item_and_amount_is_an_expense(self):
         self.assertEqual('expense', self.classify('rice plate 300'))
 
+    def test_expense_overrides_current_income_mode_when_intent_is_enabled(self):
+        result = asyncio.run(
+            self.service.classify_intent('spend of petrol 500', current_mode='income')
+        )
+        self.assertEqual('expense', result['intent'])
+
+    def test_ambiguous_money_received_from_person_requires_confirmation(self):
+        result = asyncio.run(self.service.classify_intent('Hari gave me 6000'))
+        self.assertTrue(result['needs_confirmation'])
+        self.assertEqual(['income', 'loan'], result['candidates'])
+
+    def test_spend_wording_is_an_expense(self):
+        self.assertEqual('expense', self.classify('spend on petrol 600'))
+
     def test_financial_questions_stay_in_chat_even_with_amounts(self):
         questions = (
             'how much did I spend this month?',

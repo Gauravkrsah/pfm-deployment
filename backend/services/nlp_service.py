@@ -1458,9 +1458,24 @@ class NLPService:
             normalized,
         ))
         expense_signal = bool(re.search(
-            r"\b(spent|bought|purchased|expense|cost|costing|shopping|bill|paid\s+for)\b",
+            r"\b(spend|spent|bought|purchased|expense|cost|costing|shopping|bill|paid\s+for)\b",
             normalized,
         ))
+
+        # "Alex gave/sent me 500" does not say whether this was a gift,
+        # income, a borrowed loan, or a repayment. Never guess and write it.
+        ambiguous_received_transfer = bool(re.search(
+            r"\b[a-z][a-z.'-]*\s+(?:gave|sent|transferred|paid)\s+me\b", normalized,
+        ))
+        if ambiguous_received_transfer and has_amount:
+            return {
+                "intent": "income",
+                "confidence": 0.45,
+                "reason": "Money received from a person could be income, a gift, a loan, or repayment.",
+                "source": "rules",
+                "needs_confirmation": True,
+                "candidates": ["income", "loan"],
+            }
 
         if loan_signal:
             return {"intent": "loan", "confidence": 0.98, "reason": "loan transaction wording", "source": "rules"}
@@ -1484,7 +1499,7 @@ class NLPService:
     async def classify_intent(self, text: str, current_mode: str = "chat") -> dict:
         """Choose a UI input mode only; this method never persists a transaction."""
         rule_result = self._rule_based_intent(text)
-        if rule_result["confidence"] >= 0.85 or not self.nim_available:
+        if rule_result.get("needs_confirmation") or rule_result["confidence"] >= 0.85 or not self.nim_available:
             return rule_result
 
         prompt = f"""Classify this personal-finance input by intent only.
