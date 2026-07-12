@@ -27,6 +27,10 @@ function App() {
     } catch { return null }
   })
   const [showAddExpense, setShowAddExpense] = useState(false)
+  const [addExpenseInput, setAddExpenseInput] = useState('')
+  const [addExpenseLoading, setAddExpenseLoading] = useState(false)
+  const [addExpenseMessage, setAddExpenseMessage] = useState('')
+  const [pendingAddExpenses, setPendingAddExpenses] = useState(null)
   const [chatKey, setChatKey] = useState(0)
   const tableRef = useRef()
   const incomeRef = useRef()
@@ -140,6 +144,71 @@ function App() {
     }
     if (loansRef.current) {
       loansRef.current.refresh()
+    }
+  }
+
+  const closeAddExpenseModal = () => {
+    setShowAddExpense(false)
+    setAddExpenseInput('')
+    setAddExpenseLoading(false)
+    setAddExpenseMessage('')
+    setPendingAddExpenses(null)
+  }
+
+  const handleQuickExpenseSubmit = async (e) => {
+    e.preventDefault()
+    const text = addExpenseInput.trim()
+    if (!text || addExpenseLoading) return
+
+    setAddExpenseLoading(true)
+    setAddExpenseMessage('')
+
+    try {
+      const response = await axios.post(`${window.APP_CONFIG?.API_BASE_URL || ''}/api/expenses/parse`, { text, mode: 'expense' })
+      const { expenses, reply } = response.data
+
+      if (!expenses || expenses.length === 0) {
+        setAddExpenseMessage(reply || 'I could not understand that expense. Include an item and amount.')
+        return
+      }
+
+      const needsCategory = expenses.some(exp => {
+        const category = String(exp.category || '').toLowerCase()
+        return exp.needs_confirmation || category === 'other' || category === 'miscellaneous'
+      })
+
+      if (needsCategory) {
+        setPendingAddExpenses(expenses)
+        setAddExpenseMessage(reply || 'Choose a category for this expense.')
+        return
+      }
+
+      await handleExpenseAdded(expenses)
+      closeAddExpenseModal()
+    } catch (error) {
+      setAddExpenseMessage('Unable to save right now. Please try again.')
+    } finally {
+      setAddExpenseLoading(false)
+    }
+  }
+
+  const handleQuickExpenseCategory = async (category) => {
+    if (!pendingAddExpenses || addExpenseLoading) return
+
+    setAddExpenseLoading(true)
+    setAddExpenseMessage('')
+
+    try {
+      await handleExpenseAdded(pendingAddExpenses.map(exp => ({
+        ...exp,
+        category,
+        needs_confirmation: false,
+      })))
+      closeAddExpenseModal()
+    } catch (error) {
+      setAddExpenseMessage('Unable to save right now. Please try again.')
+    } finally {
+      setAddExpenseLoading(false)
     }
   }
 
@@ -276,47 +345,65 @@ function App() {
 
         {/* Add Modal */}
         {showAddExpense && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end lg:items-center justify-center" onClick={() => setShowAddExpense(false)}>
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end lg:items-center justify-center" onClick={closeAddExpenseModal}>
             <div className="bg-white dark:bg-paper-100 w-full h-[90vh] lg:h-[600px] lg:w-[600px] lg:rounded-3xl shadow-2xl flex flex-col animate-slide-up lg:animate-scale-in" onClick={(e) => e.stopPropagation()}>
               <div className="flex-shrink-0 flex items-center justify-between px-8 py-6 border-b border-gray-100 dark:border-paper-200">
                 <h3 className="font-display font-bold text-xl dark:text-white">Add Expense</h3>
-                <button onClick={() => setShowAddExpense(false)} className="bg-gray-100 dark:bg-paper-200 text-gray-600 dark:text-gray-300 p-2 rounded-full hover:bg-gray-200 dark:hover:bg-paper-300 transition-colors">
+                <button onClick={closeAddExpenseModal} className="bg-gray-100 dark:bg-paper-200 text-gray-600 dark:text-gray-300 p-2 rounded-full hover:bg-gray-200 dark:hover:bg-paper-300 transition-colors">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto px-6 py-4">
-                <div className="space-y-3">
-                  {/* Chat messages will go here */}
+                <div className="space-y-3 text-sm">
+                  {pendingAddExpenses && (
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900 dark:border-amber-800/40 dark:bg-amber-900/20 dark:text-amber-100">
+                      <p className="font-medium">{addExpenseMessage || 'Choose a category for this expense.'}</p>
+                      {pendingAddExpenses.map((expense, index) => (
+                        <p key={index} className="mt-2 text-gray-700 dark:text-gray-200">
+                          Rs.{Math.abs(expense.amount || 0).toLocaleString()} - {expense.item || expense.remarks || 'Expense'}
+                        </p>
+                      ))}
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {['Food', 'Transport', 'Utilities', 'Entertainment', 'Medical', 'Education', 'Shopping', 'Groceries', 'Personal Care', 'Other'].map(category => (
+                          <button
+                            key={category}
+                            type="button"
+                            onClick={() => handleQuickExpenseCategory(category)}
+                            disabled={addExpenseLoading}
+                            className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-sm border border-gray-200 hover:bg-gray-100 disabled:opacity-60 dark:bg-paper-200 dark:text-gray-100 dark:border-paper-300 dark:hover:bg-paper-300"
+                          >
+                            {category}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {!pendingAddExpenses && addExpenseMessage && (
+                    <div className="rounded-2xl bg-red-50 px-4 py-3 text-red-700 dark:bg-red-900/20 dark:text-red-200">
+                      {addExpenseMessage}
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="flex-shrink-0 border-t border-gray-200 dark:border-paper-200 px-6 py-4">
-                <form onSubmit={async (e) => {
-                  e.preventDefault()
-                  const formData = new FormData(e.target)
-                  const text = formData.get('expense')
-                  if (!text.trim()) return
-
-                  try {
-                    const response = await axios.post(`${window.APP_CONFIG?.API_BASE_URL || ''}/api/expenses/parse`, { text, mode: 'expense' })
-                    const { expenses } = response.data
-                    if (expenses && expenses.length > 0) {
-                      await handleExpenseAdded(expenses)
-                      setShowAddExpense(false)
-                    }
-                  } catch (error) {
-                    console.error(error)
-                  }
-                }} className="flex gap-2">
+                <form onSubmit={handleQuickExpenseSubmit} className="flex gap-2">
                   <input
                     name="expense"
+                    value={addExpenseInput}
+                    onChange={(e) => {
+                      setAddExpenseInput(e.target.value)
+                      setPendingAddExpenses(null)
+                      setAddExpenseMessage('')
+                    }}
                     placeholder="e.g., 500 on lunch, 200 on coffee"
                     className="flex-1 px-4 py-3 text-sm border border-gray-300 dark:border-paper-300 bg-white dark:bg-paper-200 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 rounded-full focus:border-black dark:focus:border-white focus:outline-none transition-colors"
+                    disabled={addExpenseLoading}
                     autoFocus
                   />
-                  <button type="submit" className="w-10 h-10 bg-black dark:bg-white text-white dark:text-paper-100 rounded-full hover:bg-gray-800 dark:hover:bg-gray-200 transition-all flex items-center justify-center text-lg flex-shrink-0">
-                    ↑
+                  <button type="submit" disabled={addExpenseLoading || !addExpenseInput.trim()} className="w-10 h-10 bg-black dark:bg-white text-white dark:text-paper-100 rounded-full hover:bg-gray-800 dark:hover:bg-gray-200 transition-all flex items-center justify-center text-lg flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed">
+                    {addExpenseLoading ? '...' : '↑'}
                   </button>
                 </form>
               </div>

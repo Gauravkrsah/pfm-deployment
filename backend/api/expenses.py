@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 from services.nlp_service import NLPService
@@ -10,6 +10,16 @@ class ParseRequest(BaseModel):
     text: str
     mode: str = "expense"
 
+class IntentRequest(BaseModel):
+    text: str
+    current_mode: str = "chat"
+
+class MediaUnderstandRequest(BaseModel):
+    media_type: str
+    mime_type: str
+    data: str
+    prompt: str = ""
+
 class ChatRequest(BaseModel):
     text: str
     user_id: str = None
@@ -19,6 +29,10 @@ class ChatRequest(BaseModel):
     group_name: str = None
     group_expenses_data: list = Field(default_factory=list)
     conversation_history: list = Field(default_factory=list)
+    voice_mode: bool = False
+
+class VoiceSynthesisRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=4000)
 
 class BudgetOptimizerRequest(BaseModel):
     target_reduction: int
@@ -36,6 +50,41 @@ expense_analyzer = ExpenseAnalyzer()
 async def parse_expense(request: ParseRequest):
     """Parse expense text and return structured expense data"""
     return await nlp_service.parse_expense(request.text, request.mode)
+
+@router.post("/intent")
+async def classify_intent(request: IntentRequest):
+    """Classify an input without creating or modifying any financial records."""
+    return await nlp_service.classify_intent(request.text, request.current_mode)
+
+@router.post("/media/understand")
+async def understand_media(request: MediaUnderstandRequest):
+    """Convert supported image/audio input into text for the existing app flows."""
+    try:
+        return await nlp_service.understand_media(
+            request.media_type,
+            request.mime_type,
+            request.data,
+            request.prompt,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+@router.post("/voice/synthesize")
+async def synthesize_voice(request: VoiceSynthesisRequest):
+    """Generate natural neural speech for a completed assistant turn."""
+    try:
+        audio = await nlp_service.synthesize_voice(request.text)
+        return Response(
+            content=audio,
+            media_type="audio/wav",
+            headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 @router.post("/chat")
 async def chat_about_expenses(request: ChatRequest):

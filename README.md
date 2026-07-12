@@ -80,12 +80,19 @@ REACT_APP_API_BASE_URL=http://localhost:8000
 NVIDIA_API_KEY=your_nvidia_api_key
 NVIDIA_NIM_MODEL=nvidia/nemotron-3-super-120b-a12b
 NVIDIA_NIM_ENTRY_MODEL=nvidia/llama-3.1-nemotron-nano-8b-v1
+NVIDIA_NIM_MULTIMODAL_MODEL=nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
+NVIDIA_NIM_TTS_URL=https://877104f7-e885-42b9-8de8-f6e4c6303969.invocation.api.nvcf.nvidia.com/v1/audio/synthesize
+NVIDIA_NIM_TTS_VOICE=Magpie-Multilingual.EN-US.Aria
+NVIDIA_NIM_TTS_TIMEOUT=7
+NVIDIA_NIM_VOICE_CHAT_MODEL=nvidia/nemotron-3-nano-30b-a3b
 NVIDIA_NIM_BASE_URL=https://integrate.api.nvidia.com/v1
 NVIDIA_NIM_MAX_TOKENS=1200
 SUPABASE_URL=your_supabase_url
 SUPABASE_SERVICE_KEY=your_supabase_service_role_key
 PORT=8000
 ```
+
+For production voice latency, point `NVIDIA_NIM_TTS_URL` at an always-warm Magpie TTS NIM deployment. The catalog URL is suitable as a development fallback but may cold-start.
 
 > 💡 Copy from `.env.example` files as templates.
 

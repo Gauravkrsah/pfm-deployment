@@ -17,5 +17,15 @@ services:
         value: nvidia/nemotron-3-super-120b-a12b
       - key: NVIDIA_NIM_ENTRY_MODEL
         value: nvidia/llama-3.1-nemotron-nano-8b-v1
+      - key: NVIDIA_NIM_MULTIMODAL_MODEL
+        value: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
+      - key: NVIDIA_NIM_TTS_URL
+        value: https://877104f7-e885-42b9-8de8-f6e4c6303969.invocation.api.nvcf.nvidia.com/v1/audio/synthesize
+      - key: NVIDIA_NIM_TTS_VOICE
+        value: Magpie-Multilingual.EN-US.Aria
+      - key: NVIDIA_NIM_TTS_TIMEOUT
+        value: "7"
+      - key: NVIDIA_NIM_VOICE_CHAT_MODEL
+        value: nvidia/nemotron-3-nano-30b-a3b
       - key: NVIDIA_NIM_MAX_TOKENS
         value: "1200"

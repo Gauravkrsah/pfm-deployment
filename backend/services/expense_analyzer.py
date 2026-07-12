@@ -1,25 +1,11 @@
 from typing import List, Dict, Any
-from datetime import datetime, timedelta
-import re
+from datetime import datetime, time
+from utils.date_periods import resolve_date_period
 
 class ExpenseAnalyzer:
     """Advanced expense analysis and query processing"""
 
     def __init__(self):
-        self.months = {
-            'january': 1, 'jan': 1,
-            'february': 2, 'feb': 2,
-            'march': 3, 'mar': 3,
-            'april': 4, 'apr': 4,
-            'may': 5,
-            'june': 6, 'jun': 6,
-            'july': 7, 'jul': 7,
-            'august': 8, 'aug': 8,
-            'september': 9, 'sep': 9, 'sept': 9,
-            'october': 10, 'oct': 10,
-            'november': 11, 'nov': 11,
-            'december': 12, 'dec': 12
-        }
         self.categories = {
             'food': ['food', 'biryani', 'pizza', 'restaurant', 'hotel', 'meal', 'lunch', 'dinner', 'eat', 'cafe', 'snack', 'breakfast', 'tea', 'coffee', 'momo', 'chicken', 'lassi', 'chiya', 'chai'],
             'groceries': ['grocery', 'groceries', 'vegetables', 'fruits', 'market', 'supermarket', 'store', 'milk', 'bread'],
@@ -254,94 +240,13 @@ class ExpenseAnalyzer:
     
     def extract_time_period(self, query: str) -> tuple:
         """Extract time period from query and return (start_date, end_date, period_name)"""
-        query_lower = query.lower()
-        now = datetime.now()
-        
-        # "all time" / "total" / "ever" / "till now" = no filter (return everything)
-        if any(phrase in query_lower for phrase in ['all time', 'till now', 'upto now', 'up to now', 'so far', 'ever']):
-            return (None, None, 'all time')
-        
-        # This year
-        if 'this year' in query_lower or 'current year' in query_lower:
-            start = datetime(now.year, 1, 1)
-            return (start, now, f'this year ({now.year})')
-        
-        # Last year
-        if 'last year' in query_lower or 'previous year' in query_lower:
-            start = datetime(now.year - 1, 1, 1)
-            end = datetime(now.year, 1, 1) - timedelta(seconds=1)
-            return (start, end, f'last year ({now.year - 1})')
-        
-        # Specific year like "in 2025" or just "2025"
-        year_match = re.search(r'\b(20\d{2})\b', query_lower)
-        if year_match:
-            year = int(year_match.group(1))
-            start = datetime(year, 1, 1)
-            end = datetime(year, 12, 31, 23, 59, 59)
-            return (start, end, f'year {year}')
-        
-        # This month
-        if 'this month' in query_lower or 'current month' in query_lower:
-            start = datetime(now.year, now.month, 1)
-            return (start, now, 'this month')
-        
-        # Last month
-        if 'last month' in query_lower or 'previous month' in query_lower:
-            if now.month == 1:
-                start = datetime(now.year - 1, 12, 1)
-                end = datetime(now.year, 1, 1) - timedelta(days=1)
-            else:
-                start = datetime(now.year, now.month - 1, 1)
-                end = datetime(now.year, now.month, 1) - timedelta(days=1)
-            return (start, end, 'last month')
-        
-        # Specific month name
-        for month_name, month_num in self.months.items():
-            if month_name in query_lower:
-                # Determine year
-                year = now.year
-                if month_num > now.month:
-                    year = now.year - 1
-                
-                start = datetime(year, month_num, 1)
-                if month_num == 12:
-                    end = datetime(year + 1, 1, 1) - timedelta(days=1)
-                else:
-                    end = datetime(year, month_num + 1, 1) - timedelta(days=1)
-                
-                return (start, end, f"{month_name.title()} {year}")
-        
-        # This week
-        if 'this week' in query_lower or 'current week' in query_lower:
-            start = now - timedelta(days=now.weekday())
-            return (start, now, 'this week')
-        
-        # Last week
-        if 'last week' in query_lower or 'previous week' in query_lower:
-            start = now - timedelta(days=now.weekday() + 7)
-            end = now - timedelta(days=now.weekday() + 1)
-            return (start, end, 'last week')
-        
-        # Today
-        if 'today' in query_lower:
-            start = datetime(now.year, now.month, now.day)
-            return (start, now, 'today')
-        
-        # Yesterday
-        if 'yesterday' in query_lower:
-            yesterday = now - timedelta(days=1)
-            start = datetime(yesterday.year, yesterday.month, yesterday.day)
-            end = start + timedelta(days=1) - timedelta(seconds=1)
-            return (start, end, 'yesterday')
-        
-        # Last N days
-        days_match = re.search(r'last (\d+) days?', query_lower)
-        if days_match:
-            days = int(days_match.group(1))
-            start = now - timedelta(days=days)
-            return (start, now, f'last {days} days')
-        
-        return (None, None, None)
+        period = resolve_date_period(query)
+        if not period.start or not period.end:
+            return (None, None, 'all time' if period.explicit else None)
+
+        start = datetime.combine(period.start, time.min)
+        end = datetime.combine(period.end, time.max)
+        return (start, end, period.label)
 
     def _handle_loan_query(self, query_lower: str, analysis: Dict[str, Any], time_context: str, expenses_data: List[Dict]) -> str:
         """Handle loan-related queries"""

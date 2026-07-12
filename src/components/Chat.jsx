@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import axios from 'axios'
-import { Send, MessageCircle, Receipt, Wallet, ArrowLeftRight, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Send, MessageCircle, Receipt, Wallet, ArrowLeftRight, Trash2, ChevronLeft, ChevronRight, Plus, Image as ImageIcon, AudioLines, Square, X, Mic, Play } from 'lucide-react'
 import { supabase } from '../supabase'
 import DeleteConfirmationModal from './ui/DeleteConfirmationModal'
 
@@ -18,11 +18,192 @@ const INPUT_MODES = [
   { id: 'loan', label: 'Loan', icon: ArrowLeftRight, placeholder: 'e.g., lent 1000 to Ram', hint: 'e.g., "lent 1000 to Ram" or "borrowed 500 from Sita"', emoji: '🤝', desc: 'Track loans and borrowings' },
 ]
 
+const REVIEW_CATEGORIES = [
+  'Food', 'Groceries', 'Transport', 'Utilities', 'Rent', 'Shopping', 'Medical',
+  'Entertainment', 'Education', 'Travel', 'Accommodation', 'Electronics',
+  'Personal Care', 'Fitness', 'Gifts', 'Finance', 'Maintenance', 'Income', 'Loan', 'Other'
+]
+
 const INPUT_MODE_STORAGE_KEY = 'pfm_input_mode'
+const AUTO_INTENT_STORAGE_KEY = 'pfm_auto_intent_enabled'
+const VOICE_END_SILENCE_MS = 2100
+const VOICE_MIN_SPEECH_MS = 650
+const VOICE_LEVEL_FLOOR = 0.016
 
 const getSavedInputMode = () => {
   const savedMode = localStorage.getItem(INPUT_MODE_STORAGE_KEY)
   return INPUT_MODES.some(mode => mode.id === savedMode) ? savedMode : 'expense'
+}
+
+const getSavedAutoIntent = () => localStorage.getItem(AUTO_INTENT_STORAGE_KEY) !== 'false'
+
+const fileToBase64 = (file) => new Promise((resolve, reject) => {
+  const reader = new FileReader()
+  reader.onload = () => resolve(String(reader.result).split(',', 2)[1] || '')
+  reader.onerror = () => reject(new Error('Unable to read the selected media.'))
+  reader.readAsDataURL(file)
+})
+
+const fileToDataUrl = (file) => new Promise((resolve, reject) => {
+  const reader = new FileReader()
+  reader.onload = () => resolve(String(reader.result || ''))
+  reader.onerror = () => reject(new Error('Unable to preview the selected image.'))
+  reader.readAsDataURL(file)
+})
+
+const createImagePreview = async (file) => {
+  const sourceUrl = await fileToDataUrl(file)
+  return new Promise((resolve, reject) => {
+    const image = new window.Image()
+    image.onload = () => {
+      const maxDimension = 640
+      const scale = Math.min(1, maxDimension / Math.max(image.naturalWidth, image.naturalHeight))
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.max(1, Math.round(image.naturalWidth * scale))
+      canvas.height = Math.max(1, Math.round(image.naturalHeight * scale))
+      const context = canvas.getContext('2d')
+      context.fillStyle = '#ffffff'
+      context.fillRect(0, 0, canvas.width, canvas.height)
+      context.drawImage(image, 0, 0, canvas.width, canvas.height)
+      resolve(canvas.toDataURL('image/jpeg', 0.78))
+    }
+    image.onerror = () => reject(new Error('The selected image could not be previewed.'))
+    image.src = sourceUrl
+  })
+}
+
+const formatDuration = (seconds) => {
+  const safeSeconds = Math.max(0, Math.floor(seconds || 0))
+  return `${Math.floor(safeSeconds / 60)}:${String(safeSeconds % 60).padStart(2, '0')}`
+}
+
+const getFirstName = (value, fallback = 'User') => {
+  const source = String(value || '').trim()
+  if (!source) return fallback
+  const emailName = source.includes('@') ? source.split('@')[0] : source
+  const first = emailName.split(/[.\s_-]+/).find(Boolean)
+  return first ? first.charAt(0).toUpperCase() + first.slice(1) : fallback
+}
+
+const cleanSpokenTranscript = (value) => {
+  let text = String(value || '')
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  if (!text) return ''
+
+  const fillerPatterns = [
+    /\b(?:uh+|um+|erm+|er+|ah+|hmm+|mm+)\b/gi,
+    /\b(?:you know|i mean|kind of|sort of|basically|actually|literally)\b/gi,
+    /^(?:so|okay|ok|alright|right)\s+/i,
+  ]
+  fillerPatterns.forEach(pattern => {
+    text = text.replace(pattern, ' ')
+  })
+  text = text.replace(/\s+/g, ' ').trim()
+
+  const tokens = text.split(' ')
+  const compact = []
+  for (const token of tokens) {
+    const previous = compact[compact.length - 1]
+    if (previous && previous.toLowerCase().replace(/[^\w]/g, '') === token.toLowerCase().replace(/[^\w]/g, '')) {
+      continue
+    }
+    compact.push(token)
+  }
+
+  let cleaned = compact
+  for (let size = 4; size >= 2; size -= 1) {
+    const next = []
+    for (let index = 0; index < cleaned.length; index += 1) {
+      const currentPhrase = cleaned.slice(index, index + size).join(' ').toLowerCase()
+      const nextPhrase = cleaned.slice(index + size, index + size * 2).join(' ').toLowerCase()
+      if (currentPhrase && currentPhrase === nextPhrase) {
+        next.push(...cleaned.slice(index, index + size))
+        index += size * 2 - 1
+      } else {
+        next.push(cleaned[index])
+      }
+    }
+    cleaned = next
+  }
+
+  return cleaned.join(' ')
+    .replace(/\s+([,.!?])/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+const isIncompleteVoiceUtterance = (value) => {
+  const text = cleanSpokenTranscript(value).toLowerCase().replace(/[?.!,]$/g, '').trim()
+  if (!text) return true
+  if (/\d/.test(text)) return false
+  return /^(can you|could you|would you|please|tell me|show me|add|add this|record|save|how much|how much i|how much did i|i spent|i spend|i got|i earned|income|expense|loan)$/.test(text)
+}
+
+const buildMediaReviewSummary = (mediaType, transactions) => {
+  const source = mediaType === 'image' ? 'image' : 'voice message'
+  const details = transactions.slice(0, 4).map(transaction => (
+    `${transaction.item} (Rs.${Math.abs(Number(transaction.amount) || 0).toLocaleString()}, ${transaction.category})`
+  )).join(', ')
+  const extra = transactions.length > 4 ? `, and ${transactions.length - 4} more` : ''
+  return `From the ${source}, I found ${transactions.length} transaction${transactions.length === 1 ? '' : 's'}: ${details}${extra}. Please review before saving.`
+}
+
+const createWavFile = (chunks, inputSampleRate) => {
+  const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0)
+  const merged = new Float32Array(totalLength)
+  let offset = 0
+  chunks.forEach(chunk => {
+    merged.set(chunk, offset)
+    offset += chunk.length
+  })
+
+  const targetRate = Math.min(16000, inputSampleRate)
+  const ratio = inputSampleRate / targetRate
+  const outputLength = Math.max(1, Math.round(merged.length / ratio))
+  const samples = new Float32Array(outputLength)
+
+  for (let index = 0; index < outputLength; index += 1) {
+    const start = Math.floor(index * ratio)
+    const end = Math.min(Math.floor((index + 1) * ratio), merged.length)
+    let sum = 0
+    for (let sourceIndex = start; sourceIndex < end; sourceIndex += 1) {
+      sum += merged[sourceIndex]
+    }
+    samples[index] = sum / Math.max(1, end - start)
+  }
+
+  const buffer = new ArrayBuffer(44 + samples.length * 2)
+  const view = new DataView(buffer)
+  const writeText = (position, value) => {
+    for (let index = 0; index < value.length; index += 1) {
+      view.setUint8(position + index, value.charCodeAt(index))
+    }
+  }
+
+  writeText(0, 'RIFF')
+  view.setUint32(4, 36 + samples.length * 2, true)
+  writeText(8, 'WAVE')
+  writeText(12, 'fmt ')
+  view.setUint32(16, 16, true)
+  view.setUint16(20, 1, true)
+  view.setUint16(22, 1, true)
+  view.setUint32(24, targetRate, true)
+  view.setUint32(28, targetRate * 2, true)
+  view.setUint16(32, 2, true)
+  view.setUint16(34, 16, true)
+  writeText(36, 'data')
+  view.setUint32(40, samples.length * 2, true)
+
+  samples.forEach((sample, index) => {
+    const clamped = Math.max(-1, Math.min(1, sample))
+    view.setInt16(44 + index * 2, clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff, true)
+  })
+
+  return new File([buffer], `voice-${Date.now()}.wav`, { type: 'audio/wav' })
 }
 
 const MODE_STYLES = {
@@ -209,18 +390,74 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
   const [expensesData, setExpensesData] = useState([])
   const [pendingTransactions, setPendingTransactions] = useState(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [attachment, setAttachment] = useState(null)
+  const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false)
+  const [isRecording, setIsRecording] = useState(false)
+  const [recordingSeconds, setRecordingSeconds] = useState(0)
+  const [voiceSessionOpen, setVoiceSessionOpen] = useState(false)
+  const [voiceSessionStatus, setVoiceSessionStatus] = useState('idle')
+  const [voiceSessionText, setVoiceSessionText] = useState('')
+  const [voiceAutoSubmit, setVoiceAutoSubmit] = useState(false)
   const messagesEndRef = useRef(null)
+  const messagesRef = useRef(messages)
   const tabRefs = useRef({})
+  const imageInputRef = useRef(null)
+  const attachmentMenuRef = useRef(null)
+  const attachmentUrlRef = useRef(null)
+  const recordingChunksRef = useRef([])
+  const recordingSampleRateRef = useRef(16000)
+  const recordingStreamRef = useRef(null)
+  const recordingContextRef = useRef(null)
+  const recordingSourceRef = useRef(null)
+  const recordingProcessorRef = useRef(null)
+  const recordingIntervalRef = useRef(null)
+  const recordingTimeoutRef = useRef(null)
+  const recordingStartedAtRef = useRef(0)
+  const isRecordingRef = useRef(false)
+  const recordingPurposeRef = useRef('attachment')
+  const processingAbortRef = useRef(null)
+  const messageSequenceRef = useRef(0)
+  const handleSubmitRef = useRef(null)
+  const startAudioRecordingRef = useRef(null)
+  const voiceAwaitingReplyRef = useRef(false)
+  const voiceReplyStartIndexRef = useRef(0)
+  const lastSpokenMessageRef = useRef(null)
+  const voiceSessionOpenRef = useRef(false)
+  const voiceContinueListeningRef = useRef(false)
+  const voiceSessionPausedRef = useRef(false)
+  const voicePlaybackRef = useRef(null)
+  const voicePlaybackUrlRef = useRef(null)
+  const voiceTtsAbortRef = useRef(null)
+  const voiceHadSpeechRef = useRef(false)
+  const voiceSpeechStartedAtRef = useRef(0)
+  const voiceLastSpeechAtRef = useRef(0)
+  const voiceNoiseFloorRef = useRef(0.006)
+  const voiceConsecutiveFramesRef = useRef(0)
+  const voiceAutoStopRef = useRef(false)
+  const toggleVoicePauseRef = useRef(null)
+  const startVoiceListeningRef = useRef(null)
+  const voiceRecognitionRef = useRef(null)
+  const voiceRecognitionActiveRef = useRef(false)
+  const voiceRecognitionTranscriptRef = useRef('')
+  const voiceRecognitionFinalTranscriptRef = useRef('')
+  const voiceRecognitionFinalizeTimerRef = useRef(null)
+  const voiceRecognitionStartedAtRef = useRef(0)
+  const voicePendingPartialTranscriptRef = useRef('')
   const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 })
   const [carouselDir, setCarouselDir] = useState(0) // -1 left, 1 right
   const [animating, setAnimating] = useState(false)
   const touchStartX = useRef(null)
 
   const [inputMode, setInputMode] = useState(getSavedInputMode)
+  const [autoIntentEnabled, setAutoIntentEnabled] = useState(getSavedAutoIntent)
 
   useEffect(() => {
     localStorage.setItem(INPUT_MODE_STORAGE_KEY, inputMode)
   }, [inputMode])
+
+  useEffect(() => {
+    localStorage.setItem(AUTO_INTENT_STORAGE_KEY, String(autoIntentEnabled))
+  }, [autoIntentEnabled])
 
   // Update sliding indicator position whenever inputMode changes
   useEffect(() => {
@@ -274,7 +511,11 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
   }, [messages, loading])
 
   useEffect(() => {
-    localStorage.setItem('pfm_messages', JSON.stringify(messages))
+    messagesRef.current = messages
+    const persistableMessages = messages.map(message => message.attachment
+      ? { ...message, attachment: { ...message.attachment, previewUrl: undefined } }
+      : message)
+    localStorage.setItem('pfm_messages', JSON.stringify(persistableMessages))
   }, [messages])
 
   const fetchExpensesData = useCallback(async () => {
@@ -294,6 +535,490 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
     if (user) fetchExpensesData()
   }, [user, currentGroup, fetchExpensesData])
 
+  const replaceAttachment = useCallback((nextAttachment) => {
+    if (attachmentUrlRef.current?.startsWith('blob:')) {
+      URL.revokeObjectURL(attachmentUrlRef.current)
+    }
+    attachmentUrlRef.current = nextAttachment?.previewUrl || null
+    setAttachment(nextAttachment)
+  }, [])
+
+  const stopAudioRecording = useCallback(() => {
+    if (!isRecordingRef.current) return
+
+    isRecordingRef.current = false
+    setIsRecording(false)
+    clearInterval(recordingIntervalRef.current)
+    clearTimeout(recordingTimeoutRef.current)
+
+    const duration = Math.max(1, Math.round((Date.now() - recordingStartedAtRef.current) / 1000))
+    const chunks = recordingChunksRef.current
+    const sampleRate = recordingSampleRateRef.current
+    const recordingPurpose = recordingPurposeRef.current
+    const voiceHadSpeech = voiceHadSpeechRef.current
+    const isVoicePurpose = recordingPurpose === 'voice'
+    recordingPurposeRef.current = 'attachment'
+
+    if (recordingProcessorRef.current) {
+      recordingProcessorRef.current.onaudioprocess = null
+      recordingProcessorRef.current.disconnect()
+    }
+    recordingSourceRef.current?.disconnect()
+    recordingStreamRef.current?.getTracks().forEach(track => track.stop())
+    recordingContextRef.current?.close().catch(() => {})
+    voiceRecognitionRef.current?.abort()
+
+    recordingProcessorRef.current = null
+    recordingSourceRef.current = null
+    recordingStreamRef.current = null
+    recordingContextRef.current = null
+    recordingChunksRef.current = []
+    setRecordingSeconds(0)
+
+    if (recordingPurpose === 'discard') return
+
+    if (isVoicePurpose && !voiceHadSpeech) {
+      setVoiceSessionStatus(voiceSessionPausedRef.current ? 'paused' : 'idle')
+      setVoiceSessionText(voiceSessionPausedRef.current
+        ? 'Voice conversation paused'
+        : 'I did not hear speech · listening will resume')
+      if (recordingPurpose === 'voice' && voiceSessionOpenRef.current && voiceContinueListeningRef.current && !voiceSessionPausedRef.current) {
+        window.setTimeout(() => startAudioRecordingRef.current?.('voice'), 500)
+      }
+      return
+    }
+
+    if (!chunks.length) {
+      setMessages(prev => [...prev, { type: 'bot', text: 'No audio was captured. Please try recording again.' }])
+      if (recordingPurpose === 'voice') {
+        setVoiceSessionStatus('idle')
+        setVoiceSessionText('No audio was captured · tap to try again')
+      }
+      return
+    }
+
+    const file = createWavFile(chunks, sampleRate)
+    replaceAttachment({
+      type: 'audio',
+      file,
+      name: 'Voice recording',
+      duration,
+      previewUrl: URL.createObjectURL(file),
+    })
+    if (isVoicePurpose) {
+      setVoiceSessionStatus('processing')
+      setVoiceSessionText('Understanding your voice…')
+      setVoiceAutoSubmit(true)
+    }
+  }, [replaceAttachment])
+
+  const startAudioRecording = async (purpose = 'attachment') => {
+    if (!navigator.mediaDevices?.getUserMedia || isRecordingRef.current) {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setMessages(prev => [...prev, { type: 'bot', text: 'Audio recording is not supported by this browser.' }])
+      }
+      return
+    }
+
+    let stream = null
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
+      })
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext
+      if (!AudioContextClass) throw new Error('Audio recording is not supported by this browser.')
+
+      const audioContext = new AudioContextClass()
+      await audioContext.resume()
+      const source = audioContext.createMediaStreamSource(stream)
+      const processor = audioContext.createScriptProcessor(4096, 1, 1)
+
+      recordingChunksRef.current = []
+      recordingSampleRateRef.current = audioContext.sampleRate
+      voiceHadSpeechRef.current = false
+      voiceSpeechStartedAtRef.current = 0
+      voiceLastSpeechAtRef.current = 0
+      voiceNoiseFloorRef.current = 0.006
+      voiceConsecutiveFramesRef.current = 0
+      voiceAutoStopRef.current = false
+      processor.onaudioprocess = (event) => {
+        const channel = event.inputBuffer.getChannelData(0)
+        recordingChunksRef.current.push(new Float32Array(channel))
+        event.outputBuffer.getChannelData(0).fill(0)
+
+        if (purpose !== 'voice' || voiceSessionPausedRef.current) return
+
+        let energy = 0
+        for (let index = 0; index < channel.length; index += 1) {
+          energy += channel[index] * channel[index]
+        }
+        const rms = Math.sqrt(energy / Math.max(1, channel.length))
+        const now = performance.now()
+        const threshold = Math.max(VOICE_LEVEL_FLOOR, voiceNoiseFloorRef.current * 2.8)
+
+        if (!voiceHadSpeechRef.current) {
+          voiceNoiseFloorRef.current = (voiceNoiseFloorRef.current * 0.94) + (Math.min(rms, 0.03) * 0.06)
+          voiceConsecutiveFramesRef.current = rms > threshold
+            ? voiceConsecutiveFramesRef.current + 1
+            : Math.max(0, voiceConsecutiveFramesRef.current - 1)
+          if (voiceConsecutiveFramesRef.current >= 2) {
+            voiceHadSpeechRef.current = true
+            voiceSpeechStartedAtRef.current = now
+            voiceLastSpeechAtRef.current = now
+            setVoiceSessionText('I’m listening…')
+          }
+          return
+        }
+
+        if (rms > Math.max(VOICE_LEVEL_FLOOR * 0.75, threshold * 0.72)) {
+          voiceLastSpeechAtRef.current = now
+        }
+        const speechDuration = now - voiceSpeechStartedAtRef.current
+        const silenceDuration = now - voiceLastSpeechAtRef.current
+        if (
+          !voiceAutoStopRef.current
+          && speechDuration >= VOICE_MIN_SPEECH_MS
+          && silenceDuration >= VOICE_END_SILENCE_MS
+        ) {
+          voiceAutoStopRef.current = true
+          window.setTimeout(() => stopAudioRecording(), 0)
+        }
+      }
+      source.connect(processor)
+      processor.connect(audioContext.destination)
+
+      replaceAttachment(null)
+      recordingStreamRef.current = stream
+      recordingContextRef.current = audioContext
+      recordingSourceRef.current = source
+      recordingProcessorRef.current = processor
+      recordingStartedAtRef.current = Date.now()
+      recordingPurposeRef.current = purpose
+      isRecordingRef.current = true
+      setRecordingSeconds(0)
+      setIsRecording(true)
+      if (purpose === 'voice') {
+        voiceContinueListeningRef.current = true
+        setVoiceSessionStatus('listening')
+        setVoiceSessionText('Listening…')
+      }
+
+      recordingIntervalRef.current = setInterval(() => {
+        setRecordingSeconds(Math.min(30, Math.floor((Date.now() - recordingStartedAtRef.current) / 1000)))
+      }, 250)
+      recordingTimeoutRef.current = setTimeout(stopAudioRecording, 45000)
+    } catch (error) {
+      stream?.getTracks().forEach(track => track.stop())
+      if (purpose === 'voice') {
+        setVoiceSessionStatus('idle')
+        setVoiceSessionText(error.name === 'NotAllowedError'
+          ? 'Microphone access is required for voice conversations'
+          : 'Could not start the microphone · tap to try again')
+      }
+      setMessages(prev => [...prev, {
+        type: 'bot',
+        text: error.name === 'NotAllowedError'
+          ? 'Microphone permission was denied. Allow microphone access and try again.'
+          : (error.message || 'Unable to start audio recording.'),
+      }])
+    }
+  }
+
+  startAudioRecordingRef.current = startAudioRecording
+
+  const cancelVoiceRecognition = () => {
+    voiceRecognitionActiveRef.current = false
+    voiceRecognitionTranscriptRef.current = ''
+    voiceRecognitionFinalTranscriptRef.current = ''
+    clearTimeout(voiceRecognitionFinalizeTimerRef.current)
+    voiceRecognitionFinalizeTimerRef.current = null
+    clearInterval(recordingIntervalRef.current)
+    setRecordingSeconds(0)
+    if (voiceRecognitionRef.current) {
+      voiceRecognitionRef.current.onend = null
+      try { voiceRecognitionRef.current.abort() } catch (error) { }
+      voiceRecognitionRef.current = null
+    }
+  }
+
+  const startVoiceListening = () => {
+    if (
+      !voiceSessionOpenRef.current
+      || !voiceContinueListeningRef.current
+      || voiceSessionPausedRef.current
+      || voiceRecognitionActiveRef.current
+    ) return
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SpeechRecognition) {
+      startAudioRecordingRef.current?.('voice')
+      return
+    }
+
+    const recognition = new SpeechRecognition()
+    let fallbackToRecorder = false
+    recognition.lang = navigator.language?.startsWith('en') ? navigator.language : 'en-IN'
+    recognition.continuous = true
+    recognition.interimResults = true
+    recognition.maxAlternatives = 1
+    voiceRecognitionRef.current = recognition
+    voiceRecognitionActiveRef.current = true
+    voiceRecognitionTranscriptRef.current = ''
+    voiceRecognitionFinalTranscriptRef.current = ''
+    voiceRecognitionStartedAtRef.current = Date.now()
+    setRecordingSeconds(0)
+    setVoiceSessionStatus('listening')
+
+    const startedAt = Date.now()
+    recordingIntervalRef.current = setInterval(() => {
+      setRecordingSeconds(Math.floor((Date.now() - startedAt) / 1000))
+    }, 250)
+
+    const submitAfterSilence = () => {
+      clearTimeout(voiceRecognitionFinalizeTimerRef.current)
+      voiceRecognitionFinalizeTimerRef.current = window.setTimeout(() => {
+        if (!voiceRecognitionActiveRef.current || !voiceSessionOpenRef.current || voiceSessionPausedRef.current) return
+        const rawTranscript = (voiceRecognitionFinalTranscriptRef.current || voiceRecognitionTranscriptRef.current || '').trim()
+        const transcript = cleanSpokenTranscript(rawTranscript)
+        if (!transcript || Date.now() - voiceRecognitionStartedAtRef.current < VOICE_MIN_SPEECH_MS) return
+        setVoiceSessionStatus('processing')
+        voiceRecognitionTranscriptRef.current = transcript
+        try { recognition.stop() } catch (error) { }
+      }, VOICE_END_SILENCE_MS)
+    }
+
+    recognition.onresult = (event) => {
+      let finalTranscript = voiceRecognitionFinalTranscriptRef.current
+      let interimTranscript = ''
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const result = event.results[index]
+        const text = result[0]?.transcript || ''
+        if (result.isFinal) finalTranscript = `${finalTranscript} ${text}`.trim()
+        else interimTranscript = `${interimTranscript} ${text}`.trim()
+      }
+      voiceRecognitionFinalTranscriptRef.current = cleanSpokenTranscript(finalTranscript)
+      const transcript = cleanSpokenTranscript(`${voiceRecognitionFinalTranscriptRef.current} ${interimTranscript}`)
+      if (transcript) {
+        voiceRecognitionTranscriptRef.current = transcript
+        setVoiceSessionText(transcript)
+        submitAfterSilence()
+      }
+    }
+    recognition.onspeechend = () => {
+      submitAfterSilence()
+    }
+    recognition.onerror = (event) => {
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        voiceContinueListeningRef.current = false
+        voiceRecognitionActiveRef.current = false
+        setVoiceSessionStatus('idle')
+        setVoiceSessionText('Microphone access is required')
+      } else if (event.error === 'network' || event.error === 'audio-capture') {
+        fallbackToRecorder = true
+      }
+    }
+    recognition.onend = () => {
+      const shouldHandle = voiceRecognitionActiveRef.current
+      const transcript = cleanSpokenTranscript(`${voicePendingPartialTranscriptRef.current} ${voiceRecognitionTranscriptRef.current}`)
+      voiceRecognitionActiveRef.current = false
+      voiceRecognitionRef.current = null
+      clearTimeout(voiceRecognitionFinalizeTimerRef.current)
+      voiceRecognitionFinalizeTimerRef.current = null
+      clearInterval(recordingIntervalRef.current)
+      setRecordingSeconds(0)
+      if (!shouldHandle || !voiceSessionOpenRef.current || voiceSessionPausedRef.current) return
+
+      if (fallbackToRecorder) {
+        startAudioRecordingRef.current?.('voice')
+        return
+      }
+      if (!transcript) {
+        window.setTimeout(() => startVoiceListeningRef.current?.(), 180)
+        return
+      }
+
+      if (isIncompleteVoiceUtterance(transcript)) {
+        voicePendingPartialTranscriptRef.current = transcript
+        setVoiceSessionStatus('listening')
+        setVoiceSessionText('Go ahead, I’m still listening…')
+        window.setTimeout(() => startVoiceListeningRef.current?.(), 120)
+        return
+      }
+
+      voicePendingPartialTranscriptRef.current = ''
+      setVoiceSessionStatus('processing')
+      voiceReplyStartIndexRef.current = messagesRef.current.length
+      voiceAwaitingReplyRef.current = true
+      handleSubmitRef.current?.({ preventDefault: () => {} }, { text: transcript, voice: true })
+    }
+
+    try {
+      recognition.start()
+    } catch (error) {
+      cancelVoiceRecognition()
+      startAudioRecordingRef.current?.('voice')
+    }
+  }
+
+  startVoiceListeningRef.current = startVoiceListening
+
+  const handleImageSelected = async (event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    setAttachmentMenuOpen(false)
+    if (!file) return
+
+    if (!['image/jpeg', 'image/png'].includes(file.type)) {
+      setMessages(prev => [...prev, { type: 'bot', text: 'Please attach a JPG or PNG image.' }])
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setMessages(prev => [...prev, { type: 'bot', text: 'Please choose an image smaller than 5 MB.' }])
+      return
+    }
+
+    try {
+      const previewUrl = await createImagePreview(file)
+      replaceAttachment({ type: 'image', file, name: file.name, previewUrl })
+    } catch (error) {
+      setMessages(prev => [...prev, { type: 'bot', text: error.message || 'Unable to preview that image.' }])
+    }
+  }
+
+  useEffect(() => {
+    const closeAttachmentMenu = (event) => {
+      if (attachmentMenuRef.current && !attachmentMenuRef.current.contains(event.target)) {
+        setAttachmentMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', closeAttachmentMenu)
+    return () => document.removeEventListener('mousedown', closeAttachmentMenu)
+  }, [])
+
+  useEffect(() => () => {
+    clearInterval(recordingIntervalRef.current)
+    clearTimeout(recordingTimeoutRef.current)
+    recordingProcessorRef.current?.disconnect()
+    recordingSourceRef.current?.disconnect()
+    recordingStreamRef.current?.getTracks().forEach(track => track.stop())
+    recordingContextRef.current?.close().catch(() => {})
+    if (attachmentUrlRef.current?.startsWith('blob:')) URL.revokeObjectURL(attachmentUrlRef.current)
+    processingAbortRef.current?.abort()
+    voiceTtsAbortRef.current?.abort()
+    voicePlaybackRef.current?.pause()
+    if (voicePlaybackUrlRef.current) URL.revokeObjectURL(voicePlaybackUrlRef.current)
+  }, [])
+
+  const stopVoicePlayback = useCallback(() => {
+    voiceTtsAbortRef.current?.abort()
+    voiceTtsAbortRef.current = null
+    window.speechSynthesis?.cancel()
+    if (voicePlaybackRef.current) {
+      voicePlaybackRef.current.onended = null
+      voicePlaybackRef.current.onerror = null
+      voicePlaybackRef.current.pause()
+      voicePlaybackRef.current.currentTime = 0
+      voicePlaybackRef.current = null
+    }
+    if (voicePlaybackUrlRef.current) {
+      URL.revokeObjectURL(voicePlaybackUrlRef.current)
+      voicePlaybackUrlRef.current = null
+    }
+  }, [])
+
+  const stopProcessing = () => {
+    processingAbortRef.current?.abort()
+    processingAbortRef.current = null
+    setLoading(false)
+    if (voiceSessionOpen) {
+      voiceAwaitingReplyRef.current = false
+      setVoiceSessionStatus('idle')
+      setVoiceSessionText('Stopped · tap the microphone to continue')
+    }
+  }
+
+  const openVoiceSession = () => {
+    voiceSessionOpenRef.current = true
+    voiceContinueListeningRef.current = true
+    voiceSessionPausedRef.current = false
+    voicePendingPartialTranscriptRef.current = ''
+    setVoiceSessionOpen(true)
+    setVoiceSessionText('Listening…')
+    window.setTimeout(() => startVoiceListeningRef.current?.(), 0)
+  }
+
+  const closeVoiceSession = () => {
+    voiceSessionOpenRef.current = false
+    voiceContinueListeningRef.current = false
+    voiceSessionPausedRef.current = false
+    voicePendingPartialTranscriptRef.current = ''
+    stopVoicePlayback()
+    cancelVoiceRecognition()
+    voiceAwaitingReplyRef.current = false
+    if (isRecordingRef.current && recordingPurposeRef.current === 'voice') {
+      recordingPurposeRef.current = 'discard'
+      stopAudioRecording()
+    }
+    setVoiceSessionOpen(false)
+    setVoiceSessionStatus('idle')
+    setVoiceSessionText('')
+  }
+
+  const interruptVoiceAndListen = useCallback(() => {
+    stopVoicePlayback()
+    if (processingAbortRef.current) {
+      processingAbortRef.current.abort()
+      processingAbortRef.current = null
+      setLoading(false)
+      voiceAwaitingReplyRef.current = false
+    }
+    cancelVoiceRecognition()
+    voiceContinueListeningRef.current = true
+    voiceSessionPausedRef.current = false
+    setVoiceSessionStatus('listening')
+    setVoiceSessionText('Listening…')
+    startVoiceListeningRef.current?.()
+  }, [stopVoicePlayback])
+
+  const toggleVoicePause = () => {
+    if (voiceSessionPausedRef.current) {
+      voiceSessionPausedRef.current = false
+      voiceContinueListeningRef.current = true
+      setVoiceSessionText('Listening…')
+      startVoiceListeningRef.current?.()
+      return
+    }
+
+    voiceSessionPausedRef.current = true
+    voiceContinueListeningRef.current = false
+    stopVoicePlayback()
+    cancelVoiceRecognition()
+    if (isRecordingRef.current && recordingPurposeRef.current === 'voice') {
+      recordingPurposeRef.current = 'discard'
+      stopAudioRecording()
+    }
+    if (processingAbortRef.current) stopProcessing()
+    setVoiceSessionStatus('paused')
+    setVoiceSessionText('Voice conversation paused')
+  }
+
+  toggleVoicePauseRef.current = toggleVoicePause
+
+  useEffect(() => {
+    if (!voiceSessionOpen) return undefined
+    const handleVoiceKeyboard = (event) => {
+      if (event.code !== 'Space' || event.repeat) return
+      event.preventDefault()
+      if (voiceSessionStatus === 'speaking' || voiceSessionStatus === 'processing') {
+        interruptVoiceAndListen()
+      } else if (voiceSessionStatus === 'paused') {
+        toggleVoicePauseRef.current?.()
+      }
+    }
+    window.addEventListener('keydown', handleVoiceKeyboard)
+    return () => window.removeEventListener('keydown', handleVoiceKeyboard)
+  }, [voiceSessionOpen, voiceSessionStatus, interruptVoiceAndListen])
+
   // Check if a word looks like a real word (has vowels, not random consonants)
   const isRealWord = (word) => {
     const clean = word.replace(/[^a-zA-Z]/g, '')
@@ -310,46 +1035,182 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
     return true
   }
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e, submissionOverride = null) => {
     e.preventDefault()
-    if (!input.trim()) return
+    const requestedText = submissionOverride?.text !== undefined
+      ? String(submissionOverride.text || '').trim()
+      : input.trim()
+    const requestedAttachment = submissionOverride?.attachment !== undefined
+      ? submissionOverride.attachment
+      : attachment
+    if ((!requestedText && !requestedAttachment) || isRecordingRef.current || loading) return
 
-    // Validate: expense/income/loan modes need an amount + a real description
-    if (inputMode !== 'chat') {
-      const hasNumber = /\d/.test(input)
-      const words = input.replace(/[\d.,;:!?]/g, '').trim().split(/\s+/).filter(w => w.length >= 2)
-      const hasRealWord = words.some(w => isRealWord(w))
+    const originalText = submissionOverride?.voice
+      ? cleanSpokenTranscript(requestedText)
+      : requestedText
+    if (!originalText && !requestedAttachment) return
+    const submittedAttachment = requestedAttachment
+    const messageId = `message-${Date.now()}-${messageSequenceRef.current += 1}`
+    const controller = new AbortController()
+    const messageAttachment = submittedAttachment
+      ? {
+        type: submittedAttachment.type,
+        name: submittedAttachment.name,
+        duration: submittedAttachment.duration,
+        previewUrl: submittedAttachment.type === 'image' ? submittedAttachment.previewUrl : undefined,
+      }
+      : null
+    let userMsg = originalText
+    let displayText = originalText
+    let mediaTransactions = []
+    let mediaSummary = ''
+    let mediaIntent = null
+    let resolvedMode = inputMode
 
-      if (!hasNumber || !hasRealWord) {
-        const hint = !hasNumber
-          ? `Include an amount — ${currentModeConfig.hint}`
-          : `Use a real description — ${currentModeConfig.hint}`
-        setMessages(prev => [...prev,
-        { type: 'user', text: input, mode: inputMode },
-        { type: 'bot', text: hint }
-        ])
-        setInput('')
+    processingAbortRef.current = controller
+    setLoading(true)
+    setAttachmentMenuOpen(false)
+    setInput('')
+    replaceAttachment(null)
+    setMessages(prev => [...prev, {
+      id: messageId,
+      type: 'user',
+      text: originalText,
+      mode: inputMode,
+      attachment: messageAttachment,
+      fromAudio: Boolean(submissionOverride?.voice || submittedAttachment?.type === 'audio'),
+    }])
+
+    const finishProcessing = () => {
+      if (processingAbortRef.current === controller) {
+        processingAbortRef.current = null
+        setLoading(false)
+      }
+    }
+
+    const updateSubmittedMessage = (changes) => {
+      setMessages(prev => prev.map(message => (
+        message.id === messageId ? { ...message, ...changes } : message
+      )))
+    }
+
+    if (submittedAttachment) {
+      try {
+        const encodedMedia = await fileToBase64(submittedAttachment.file)
+        const mediaResponse = await axios.post(`${getApiBaseUrl()}/api/expenses/media/understand`, {
+          media_type: submittedAttachment.type,
+          mime_type: submittedAttachment.file.type,
+          data: encodedMedia,
+          prompt: originalText,
+        }, { signal: controller.signal })
+        const extractedText = submittedAttachment.type === 'audio'
+          ? cleanSpokenTranscript(mediaResponse.data?.text || '')
+          : String(mediaResponse.data?.text || '').trim()
+        if (!extractedText) throw new Error('No usable text was found in the media.')
+
+        mediaTransactions = Array.isArray(mediaResponse.data?.transactions)
+          ? mediaResponse.data.transactions
+          : []
+        mediaSummary = String(mediaResponse.data?.summary || mediaResponse.data?.brief || '').trim()
+        mediaIntent = INPUT_MODES.some(mode => mode.id === mediaResponse.data?.intent)
+          ? mediaResponse.data.intent
+          : null
+
+        userMsg = submittedAttachment.type === 'audio' && originalText
+          ? `${originalText}\nVoice transcript: ${extractedText}`
+          : extractedText
+        displayText = submittedAttachment.type === 'audio' ? (originalText || extractedText) : originalText
+        updateSubmittedMessage({ text: displayText })
+      } catch (error) {
+        if (axios.isCancel(error) || error.code === 'ERR_CANCELED') {
+          finishProcessing()
+          return
+        }
+        const mediaError = error.response?.data?.detail || error.message || 'Unable to process the attached media.'
+        setMessages(prev => [...prev, { type: 'bot', text: mediaError }])
+        finishProcessing()
         return
       }
     }
 
-    const userMsg = input
-    setMessages(prev => [...prev, { type: 'user', text: userMsg, mode: inputMode }])
-    setInput('')
-    setLoading(true)
+    if (submissionOverride?.voice && !submittedAttachment && isIncompleteVoiceUtterance(userMsg)) {
+      voicePendingPartialTranscriptRef.current = userMsg
+      setMessages(prev => prev.filter(message => message.id !== messageId))
+      setVoiceSessionStatus('listening')
+      setVoiceSessionText('Go ahead, I’m still listening…')
+      window.setTimeout(() => startVoiceListeningRef.current?.(), 120)
+      finishProcessing()
+      return
+    }
+
+    if (submissionOverride?.voice && !submittedAttachment && /^[\d\s,.-]+$/.test(userMsg)) {
+      setMessages(prev => [...prev, {
+        type: 'bot',
+        text: `What does ${userMsg} refer to—an expense, income, or loan?`,
+      }])
+      finishProcessing()
+      return
+    }
+
+    if (autoIntentEnabled) {
+      if (mediaIntent) {
+        resolvedMode = mediaIntent
+      } else {
+        try {
+          const response = await axios.post(`${getApiBaseUrl()}/api/expenses/intent`, {
+            text: userMsg,
+            current_mode: inputMode,
+          }, { signal: controller.signal })
+          if (INPUT_MODES.some(mode => mode.id === response.data?.intent)) {
+            resolvedMode = response.data.intent
+          }
+        } catch (error) {
+          if (axios.isCancel(error) || error.code === 'ERR_CANCELED') {
+            finishProcessing()
+            return
+          }
+          // A failed classifier must never cause an unintended transaction write.
+          resolvedMode = 'chat'
+        }
+      }
+
+      if (resolvedMode !== inputMode) {
+        setInputMode(resolvedMode)
+      }
+    }
+
+    updateSubmittedMessage({ mode: resolvedMode })
+
+    // Validate: expense/income/loan modes need an amount + a real description
+    if (resolvedMode !== 'chat' && mediaTransactions.length === 0) {
+      const resolvedModeConfig = INPUT_MODES.find(mode => mode.id === resolvedMode) || currentModeConfig
+      const hasNumber = /\d/.test(userMsg)
+      const words = userMsg.replace(/[\d.,;:!?]/g, '').trim().split(/\s+/).filter(w => w.length >= 2)
+      const hasRealWord = words.some(w => isRealWord(w))
+
+      if (!hasNumber || !hasRealWord) {
+        const hint = !hasNumber
+          ? `Include an amount — ${resolvedModeConfig.hint}`
+          : `Use a real description — ${resolvedModeConfig.hint}`
+        setMessages(prev => [...prev, { type: 'bot', text: hint }])
+        finishProcessing()
+        return
+      }
+    }
 
     try {
-      if (inputMode === 'chat') {
+      if (resolvedMode === 'chat') {
         // Chat mode — AI financial Q&A
         const { data: { user: freshUser } } = await supabase.auth.getUser()
         const currentUser = freshUser || user
-        const userName = currentUser?.user_metadata?.name || currentUser?.email?.split('@')[0] || 'User'
+        const userName = getFirstName(currentUser?.user_metadata?.name || currentUser?.email, 'User')
 
         const payload = {
           text: userMsg,
           user_id: currentUser?.id,
           user_email: currentUser?.email,
           user_name: userName,
+          voice_mode: Boolean(submissionOverride?.voice),
           conversation_history: messages
             .filter(message => (message.type === 'user' || message.type === 'bot') && typeof message.text === 'string')
             .slice(-8)
@@ -366,15 +1227,44 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
           payload.expenses_data = expensesData
         }
 
-        const response = await axios.post(`${getApiBaseUrl()}/api/expenses/chat`, payload)
+        let response
+        try {
+          response = await axios.post(`${getApiBaseUrl()}/api/expenses/chat`, payload, { signal: controller.signal })
+        } catch (voiceError) {
+          if (!submissionOverride?.voice || axios.isCancel(voiceError) || voiceError.code === 'ERR_CANCELED') throw voiceError
+          response = await axios.post(
+            `${getApiBaseUrl()}/api/expenses/chat`,
+            { ...payload, voice_mode: false },
+            { signal: controller.signal },
+          )
+        }
         setMessages(prev => [...prev, { type: 'bot', text: response.data.reply }])
 
-      } else if (inputMode === 'expense') {
-        // Expense mode — parse and save as expense
-        const response = await axios.post(`${getApiBaseUrl()}/api/expenses/parse`, { text: userMsg, mode: 'expense' })
-        const { expenses, reply } = response.data
+      } else if (resolvedMode === 'expense') {
+        // Expense mode — structured image records bypass prose reparsing.
+        let expenses = mediaTransactions.filter(transaction => transaction.transaction_type === 'expense')
+        let reply = mediaSummary
+        if (expenses.length === 0) {
+          const response = await axios.post(`${getApiBaseUrl()}/api/expenses/parse`, { text: userMsg, mode: 'expense' }, { signal: controller.signal })
+          expenses = response.data.expenses || []
+          reply = response.data.reply
+        }
 
         if (expenses && expenses.length > 0) {
+          if (submittedAttachment) {
+            const reviewSummary = submittedAttachment.type === 'image' && reply
+              ? `${reply} Please review before saving.`
+              : buildMediaReviewSummary(submittedAttachment.type, expenses)
+            setPendingTransactions({ expenses, forceMode: 'media', mediaType: submittedAttachment.type, summary: reviewSummary })
+            setMessages(prev => [...prev, {
+              type: 'confirmation',
+              text: reviewSummary,
+              expenses,
+              confirmMode: 'media'
+            }])
+            return
+          }
+
           const hasAmbiguous = expenses.some(exp => exp.needs_confirmation || (!exp.ai_classified && exp.category === 'Other'))
 
           if (hasAmbiguous) {
@@ -393,10 +1283,15 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
           setMessages(prev => [...prev, { type: 'bot', text: reply || 'I could not understand that expense. Include an item and amount.' }])
         }
 
-      } else if (inputMode === 'income') {
-        // Income mode — parse and save as income (negative amount)
-        const response = await axios.post(`${getApiBaseUrl()}/api/expenses/parse`, { text: userMsg, mode: 'income' })
-        const { expenses, reply } = response.data
+      } else if (resolvedMode === 'income') {
+        // Income mode — use structured visual extraction when available.
+        let expenses = mediaTransactions.filter(transaction => transaction.transaction_type === 'income')
+        let reply = mediaSummary
+        if (expenses.length === 0) {
+          const response = await axios.post(`${getApiBaseUrl()}/api/expenses/parse`, { text: userMsg, mode: 'income' }, { signal: controller.signal })
+          expenses = response.data.expenses || []
+          reply = response.data.reply
+        }
 
         if (expenses && expenses.length > 0) {
           const incomeExpenses = expenses.map(exp => ({
@@ -405,16 +1300,34 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
             amount: -Math.abs(exp.amount),
             remarks: exp.remarks || `Income: ${exp.item}`
           }))
+          if (submittedAttachment) {
+            const reviewSummary = submittedAttachment.type === 'image' && reply
+              ? `${reply} Please review before saving.`
+              : buildMediaReviewSummary(submittedAttachment.type, incomeExpenses)
+            setPendingTransactions({ expenses: incomeExpenses, forceMode: 'media', mediaType: submittedAttachment.type, summary: reviewSummary })
+            setMessages(prev => [...prev, {
+              type: 'confirmation',
+              text: reviewSummary,
+              expenses: incomeExpenses,
+              confirmMode: 'media'
+            }])
+            return
+          }
           await onExpenseAdded(incomeExpenses)
           setMessages(prev => [...prev, { type: 'bot', text: reply || 'Saved income.' }])
         } else {
           setMessages(prev => [...prev, { type: 'bot', text: reply || 'I could not understand that income entry. Include a source and amount.' }])
         }
 
-      } else if (inputMode === 'loan') {
+      } else if (resolvedMode === 'loan') {
         // Loan mode — parse and enter loan confirmation flow
-        const response = await axios.post(`${getApiBaseUrl()}/api/expenses/parse`, { text: userMsg, mode: 'loan' })
-        const { expenses, reply } = response.data
+        let expenses = mediaTransactions.filter(transaction => transaction.transaction_type === 'loan')
+        let reply = mediaSummary
+        if (expenses.length === 0) {
+          const response = await axios.post(`${getApiBaseUrl()}/api/expenses/parse`, { text: userMsg, mode: 'loan' }, { signal: controller.signal })
+          expenses = response.data.expenses || []
+          reply = response.data.reply
+        }
 
         if (expenses && expenses.length > 0) {
           // Try to extract person name
@@ -444,6 +1357,18 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
               expenses: updatedExpenses,
               confirmMode: 'loan'
             }])
+          } else if (submittedAttachment) {
+            const reviewSummary = submittedAttachment.type === 'image' && reply
+              ? `${reply} Please review before saving.`
+              : buildMediaReviewSummary(submittedAttachment.type, updatedExpenses)
+            setPendingTransactions({ expenses: updatedExpenses, forceMode: 'media', mediaType: submittedAttachment.type, summary: reviewSummary })
+            setMessages(prev => [...prev, {
+              type: 'confirmation',
+              text: reviewSummary,
+              expenses: updatedExpenses,
+              confirmMode: 'media'
+            }])
+            return
           } else {
             await onExpenseAdded(updatedExpenses)
             setMessages(prev => [...prev, { type: 'bot', text: reply || 'Saved loan transaction.' }])
@@ -453,15 +1378,152 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
         }
       }
     } catch (error) {
+      if (axios.isCancel(error) || error.code === 'ERR_CANCELED') return
       const serverMessage = error.response?.data?.detail || error.response?.data?.reply
-      const errorText = serverMessage
-        ? `Unable to answer right now: ${serverMessage}`
-        : 'Unable to reach the finance assistant right now. Please try again.'
+      const errorText = submissionOverride?.voice
+        ? 'I missed that. Please say it again.'
+        : serverMessage
+          ? `Unable to answer right now: ${serverMessage}`
+          : 'Unable to reach the finance assistant right now. Please try again.'
       setMessages(prev => [...prev, { type: 'bot', text: errorText }])
     } finally {
-      setLoading(false)
+      finishProcessing()
     }
   }
+
+  handleSubmitRef.current = handleSubmit
+
+  useEffect(() => {
+    if (!voiceAutoSubmit || !attachment || attachment.type !== 'audio' || loading) return
+
+    voiceReplyStartIndexRef.current = messages.length
+    voiceAwaitingReplyRef.current = true
+    setVoiceAutoSubmit(false)
+    handleSubmitRef.current?.(
+      { preventDefault: () => {} },
+      { text: '', attachment, voice: true },
+    )
+  }, [voiceAutoSubmit, attachment, loading, messages.length])
+
+  useEffect(() => {
+    if (!voiceSessionOpen || !voiceAwaitingReplyRef.current) return
+
+    const newMessages = messages.slice(voiceReplyStartIndexRef.current)
+    let response = null
+    for (let index = newMessages.length - 1; index >= 0; index -= 1) {
+      if (newMessages[index].type === 'bot' || newMessages[index].type === 'confirmation') {
+        response = newMessages[index]
+        break
+      }
+    }
+    if (!response) {
+      const transcriptMessage = [...newMessages].reverse().find(message => message.type === 'user' && message.text)
+      if (transcriptMessage) setVoiceSessionText(transcriptMessage.text)
+      return
+    }
+
+    const responseKey = response.id || `${voiceReplyStartIndexRef.current}-${response.type}-${response.text}`
+    if (lastSpokenMessageRef.current === responseKey) return
+    lastSpokenMessageRef.current = responseKey
+    voiceAwaitingReplyRef.current = false
+
+    const spokenText = String(response.text || '')
+      .replace(/[*#`|]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+    setVoiceSessionText(spokenText || 'Done')
+
+    if (!spokenText) {
+      setVoiceSessionStatus('idle')
+      return
+    }
+
+    const ttsController = new AbortController()
+    voiceTtsAbortRef.current = ttsController
+    setVoiceSessionStatus('processing')
+    setVoiceSessionText('Preparing a natural voice response…')
+
+    const continueConversation = () => {
+      if (
+        response.type === 'bot'
+        && voiceSessionOpenRef.current
+        && voiceContinueListeningRef.current
+        && !voiceSessionPausedRef.current
+      ) {
+        setVoiceSessionText('Listening…')
+        window.setTimeout(() => {
+          if (voiceSessionOpenRef.current && voiceContinueListeningRef.current && !isRecordingRef.current) {
+            startVoiceListeningRef.current?.()
+          }
+        }, 300)
+      } else {
+        setVoiceSessionStatus(voiceSessionPausedRef.current ? 'paused' : 'idle')
+        setVoiceSessionText(response.type === 'confirmation'
+          ? 'Review the transaction in chat before saving'
+          : 'Tap the microphone to continue')
+      }
+    }
+
+    const playNativeFallback = () => {
+      if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance === 'undefined') return false
+      const utterance = new window.SpeechSynthesisUtterance(spokenText)
+      const voices = window.speechSynthesis.getVoices()
+      const preferredNames = ['Google UK English Female', 'Microsoft Aria Online', 'Samantha', 'Daniel']
+      utterance.voice = preferredNames
+        .map(name => voices.find(voice => voice.name.includes(name)))
+        .find(Boolean) || voices.find(voice => /^en[-_]/i.test(voice.lang)) || null
+      utterance.lang = utterance.voice?.lang || 'en-IN'
+      utterance.rate = 1.03
+      utterance.pitch = 1
+      utterance.onstart = () => setVoiceSessionStatus('speaking')
+      utterance.onend = continueConversation
+      utterance.onerror = continueConversation
+      window.speechSynthesis.cancel()
+      window.speechSynthesis.speak(utterance)
+      return true
+    }
+
+    const playNeuralResponse = async () => {
+      try {
+        const audioResponse = await axios.post(
+          `${getApiBaseUrl()}/api/expenses/voice/synthesize`,
+          { text: spokenText },
+          { responseType: 'arraybuffer', signal: ttsController.signal, timeout: 1800 },
+        )
+        if (!voiceSessionOpenRef.current || voiceSessionPausedRef.current || ttsController.signal.aborted) return
+
+        const audioBlob = new Blob([audioResponse.data], { type: 'audio/wav' })
+        const audioUrl = URL.createObjectURL(audioBlob)
+        const audio = new Audio(audioUrl)
+        voicePlaybackUrlRef.current = audioUrl
+        voicePlaybackRef.current = audio
+        audio.onplay = () => {
+          setVoiceSessionStatus('speaking')
+          setVoiceSessionText(spokenText)
+        }
+        audio.onended = () => {
+          voicePlaybackRef.current = null
+          if (voicePlaybackUrlRef.current === audioUrl) voicePlaybackUrlRef.current = null
+          URL.revokeObjectURL(audioUrl)
+          continueConversation()
+        }
+        audio.onerror = () => {
+          voicePlaybackRef.current = null
+          if (voicePlaybackUrlRef.current === audioUrl) voicePlaybackUrlRef.current = null
+          URL.revokeObjectURL(audioUrl)
+          if (!playNativeFallback()) continueConversation()
+        }
+        await audio.play()
+      } catch (error) {
+        if (axios.isCancel(error) || error.code === 'ERR_CANCELED') return
+        if (!playNativeFallback()) continueConversation()
+      } finally {
+        if (voiceTtsAbortRef.current === ttsController) voiceTtsAbortRef.current = null
+      }
+    }
+
+    playNeuralResponse()
+  }, [messages, voiceSessionOpen])
 
   const clearChat = () => {
     setMessages([])
@@ -483,6 +1545,43 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
       setPendingTransactions(null)
     } catch (error) {
       setMessages(prev => [...prev, { type: 'bot', text: 'Error saving transaction' }])
+    }
+  }
+
+  const handleMediaTransactionChange = (index, field, value) => {
+    setPendingTransactions(current => {
+      if (!current || current.forceMode !== 'media') return current
+      return {
+        ...current,
+        expenses: current.expenses.map((expense, expenseIndex) => (
+          expenseIndex === index ? { ...expense, [field]: value } : expense
+        ))
+      }
+    })
+  }
+
+  const handleConfirmMediaSave = async () => {
+    if (!pendingTransactions?.expenses?.length) return
+    const transactions = pendingTransactions.expenses
+    if (transactions.some(transaction => !String(transaction.item || '').trim() || !Number(transaction.amount))) {
+      setMessages(prev => [...prev, { type: 'bot', text: 'Each transaction needs a clear item and amount before saving.' }])
+      return
+    }
+
+    try {
+      await onExpenseAdded(transactions.map(transaction => ({
+        ...transaction,
+        item: String(transaction.item).trim(),
+        remarks: String(transaction.remarks || transaction.item).trim(),
+        needs_confirmation: false,
+      })))
+      setMessages(prev => [...prev, {
+        type: 'bot',
+        text: `Saved ${transactions.length} reviewed transaction${transactions.length === 1 ? '' : 's'}.`
+      }])
+      setPendingTransactions(null)
+    } catch (error) {
+      setMessages(prev => [...prev, { type: 'bot', text: 'Unable to save the reviewed transactions.' }])
     }
   }
 
@@ -534,6 +1633,65 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
 
   // Render confirmation buttons based on mode
   const renderConfirmation = (msg) => {
+    if (msg.confirmMode === 'media') {
+      const reviewTransactions = pendingTransactions?.forceMode === 'media'
+        ? pendingTransactions.expenses
+        : (msg.expenses || [])
+
+      return (
+        <div className="space-y-3 mt-3">
+          <div className="space-y-2">
+            {reviewTransactions.map((transaction, index) => (
+              <div key={`${transaction.item}-${index}`} className="grid grid-cols-1 sm:grid-cols-[1fr_130px] gap-2 p-3 rounded-xl bg-white/70 dark:bg-black/10 border border-amber-200/70 dark:border-amber-800/30">
+                <div className="min-w-0 space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <input
+                      value={transaction.item || ''}
+                      onChange={(event) => handleMediaTransactionChange(index, 'item', event.target.value)}
+                      aria-label={`Item ${index + 1}`}
+                      className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-gray-800 dark:text-gray-100 outline-none border-b border-transparent focus:border-amber-400"
+                    />
+                    <span className="text-sm font-bold text-gray-800 dark:text-gray-100 whitespace-nowrap">Rs.{Math.abs(Number(transaction.amount) || 0).toLocaleString()}</span>
+                  </div>
+                  <input
+                    value={transaction.remarks || ''}
+                    onChange={(event) => handleMediaTransactionChange(index, 'remarks', event.target.value)}
+                    aria-label={`Remarks ${index + 1}`}
+                    placeholder="Optional remarks"
+                    className="w-full bg-transparent text-xs text-gray-600 dark:text-gray-300 outline-none border-b border-transparent focus:border-amber-400"
+                  />
+                </div>
+                <select
+                  value={transaction.category || 'Other'}
+                  onChange={(event) => handleMediaTransactionChange(index, 'category', event.target.value)}
+                  aria-label={`Category ${index + 1}`}
+                  className="w-full px-2.5 py-2 text-xs font-medium rounded-lg border border-gray-200 dark:border-paper-400 bg-white dark:bg-paper-300 text-gray-700 dark:text-gray-100 outline-none"
+                >
+                  {REVIEW_CATEGORIES.map(category => <option key={category} value={category}>{category}</option>)}
+                </select>
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={handleConfirmMediaSave}
+              className="px-4 py-2 text-xs font-semibold rounded-xl bg-black dark:bg-white text-white dark:text-black hover:opacity-90 transition-opacity"
+            >
+              Save reviewed {reviewTransactions.length === 1 ? 'transaction' : 'transactions'}
+            </button>
+            <button
+              type="button"
+              onClick={handleCancelPending}
+              className="px-4 py-2 text-xs font-medium rounded-xl bg-gray-100 dark:bg-paper-300 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-paper-400 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )
+    }
+
     if (msg.confirmMode === 'loan' && msg.expenses?.[0]) {
       const exp = msg.expenses[0]
       const person = exp.paid_by
@@ -631,11 +1789,11 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
             <div className="flex-1 overflow-y-auto scrollbar-hide px-4 lg:px-8 py-4 pb-72 lg:pb-72">
               <div className="max-w-7xl mx-auto space-y-3 pt-6">
                 {messages.map((msg, i) => (
-                  <div key={i} className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div key={msg.id || i} className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}>
                     {msg.type === 'confirmation' ? (
                       <div className="max-w-[90%] lg:max-w-[80%] bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 px-4 py-3 rounded-2xl">
                         <p className="text-sm text-amber-800 dark:text-amber-200 mb-1">{msg.text}</p>
-                        {msg.expenses && msg.expenses.map((exp, j) => (
+                        {msg.confirmMode !== 'media' && msg.expenses && msg.expenses.map((exp, j) => (
                           <p key={j} className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
                             Rs.{Math.abs(exp.amount).toLocaleString()} → {exp.remarks || exp.item}
                           </p>
@@ -645,7 +1803,27 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
                     ) : (
                       <div className={`${msg.type === 'user' ? 'max-w-[80%] lg:max-w-[60%] px-4 py-2.5 bg-black dark:bg-white text-white dark:text-black text-sm whitespace-pre-wrap' : 'max-w-[94%] lg:max-w-[76%] px-5 sm:px-6 py-4 sm:py-5 bg-gray-100 dark:bg-paper-200 text-gray-900 dark:text-gray-100'} rounded-2xl`}>
                         {msg.type === 'user' && msg.mode && msg.mode !== 'chat' && getModeBadge(msg.mode)}
-                        {msg.type === 'bot' ? renderAssistantMessage(msg.text) : <div>{msg.text}</div>}
+                        {msg.type === 'user' && msg.attachment && (
+                          <div className="mb-2">
+                            {msg.attachment.type === 'image' && msg.attachment.previewUrl ? (
+                              <img
+                                src={msg.attachment.previewUrl}
+                                alt="User attachment"
+                                className="max-h-52 max-w-full rounded-xl object-contain bg-black/5 dark:bg-black/10"
+                              />
+                            ) : (
+                              <div className="flex items-center gap-1.5 text-[11px] font-medium opacity-70">
+                                {msg.attachment.type === 'image' ? <ImageIcon size={13} /> : <Mic size={13} />}
+                                <span>
+                                  {msg.attachment.type === 'image'
+                                    ? 'Image attached'
+                                    : `Voice message${msg.attachment.duration ? ` · ${formatDuration(msg.attachment.duration)}` : ''}`}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {msg.type === 'bot' ? renderAssistantMessage(msg.text) : (msg.text ? <div className={msg.fromAudio ? 'italic' : ''}>{msg.text}</div> : null)}
                       </div>
                     )}
                   </div>
@@ -711,8 +1889,24 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
                   })}
                 </div>
               </div>
+              {/* Intent detection */}
+              <button
+                type="button"
+                onClick={() => setAutoIntentEnabled(enabled => !enabled)}
+                role="switch"
+                aria-checked={autoIntentEnabled}
+                aria-label={`Intent detection ${autoIntentEnabled ? 'on' : 'off'}`}
+                title={`Intent detection is ${autoIntentEnabled ? 'on' : 'off'}`}
+                className="flex-shrink-0 h-9 px-2 rounded-xl flex items-center gap-2 text-[11px] font-semibold text-gray-600 dark:text-gray-300 hover:bg-black/[0.04] dark:hover:bg-white/[0.05] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 active:scale-95 transition-all"
+              >
+                <span className="hidden xs:inline">Intent</span>
+                <span className={`relative block w-8 h-[18px] rounded-full transition-colors duration-200 ${autoIntentEnabled ? 'bg-blue-600 dark:bg-blue-500' : 'bg-gray-300 dark:bg-paper-400'}`}>
+                  <span className={`absolute left-0.5 top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow-sm transition-transform duration-200 ${autoIntentEnabled ? 'translate-x-3.5' : 'translate-x-0'}`} />
+                </span>
+              </button>
               {/* Delete button */}
               <button
+                type="button"
                 onClick={() => setShowDeleteConfirm(true)}
                 className="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-gray-400 dark:text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 active:scale-90 transition-all duration-150 border border-gray-200/50 dark:border-paper-300/30 bg-gray-100 dark:bg-paper-200/80"
                 title="Delete Chat"
@@ -762,8 +1956,26 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
                   {/* Divider inside the pill area */}
                   <div className="w-[1px] h-5 sm:h-7 bg-gray-300/80 dark:bg-paper-300/80 mx-0.5 sm:mx-2 flex-shrink-0 z-10 relative" />
 
+                  {/* Intent detection */}
+                  <button
+                    type="button"
+                    onClick={() => setAutoIntentEnabled(enabled => !enabled)}
+                    role="switch"
+                    aria-checked={autoIntentEnabled}
+                    title="Intent detection: automatically choose Chat, Expense, Income, or Loan"
+                    className="relative z-10 flex items-center justify-center gap-2.5 px-3 py-2.5 rounded-xl text-gray-600 dark:text-gray-300 hover:bg-black/[0.04] dark:hover:bg-white/[0.05] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 transition-all duration-200 active:scale-95 flex-shrink-0 font-semibold text-[12px]"
+                  >
+                    <span>Intent</span>
+                    <span className={`relative block w-8 h-[18px] rounded-full transition-colors duration-200 ${autoIntentEnabled ? 'bg-blue-600 dark:bg-blue-500' : 'bg-gray-300 dark:bg-paper-400'}`}>
+                      <span className={`absolute left-0.5 top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow-sm transition-transform duration-200 ${autoIntentEnabled ? 'translate-x-3.5' : 'translate-x-0'}`} />
+                    </span>
+                  </button>
+
+                  <div className="w-[1px] h-5 sm:h-7 bg-gray-300/80 dark:bg-paper-300/80 mx-0.5 sm:mx-2 flex-shrink-0 z-10 relative" />
+
                   {/* Delete Chat */}
                   <button
+                    type="button"
                     onClick={() => setShowDeleteConfirm(true)}
                     className="relative z-10 flex items-center justify-center gap-1 sm:gap-2 px-1.5 sm:px-4 py-2 sm:py-3 rounded-xl text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all duration-200 active:scale-95 flex-shrink-0 font-bold text-[10px] sm:text-[13.5px]"
                     title="Delete Chat"
@@ -776,40 +1988,217 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
             </div>
 
             {/* ── Input Card ── */}
-            <div className={`relative bg-white dark:bg-paper-100 rounded-3xl border ${currentStyle.border} shadow-[0_4px_20px_rgba(0,0,0,0.06),0_8px_32px_-8px_rgba(0,0,0,0.08)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.3),0_8px_32px_-8px_rgba(0,0,0,0.4)] transition-all duration-300 ${currentStyle.focusRing} overflow-hidden`}>
+            <div className={`relative bg-white dark:bg-paper-100 rounded-3xl border ${currentStyle.border} shadow-[0_4px_20px_rgba(0,0,0,0.06),0_8px_32px_-8px_rgba(0,0,0,0.08)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.3),0_8px_32px_-8px_rgba(0,0,0,0.4)] transition-all duration-300 ${currentStyle.focusRing} overflow-visible`}>
+              {attachment && (
+                <div className="flex items-center gap-3 mx-3 mt-3 p-2.5 rounded-2xl bg-gray-50 dark:bg-paper-200 border border-gray-200/70 dark:border-paper-300/70">
+                  {attachment.type === 'image' ? (
+                    <img
+                      src={attachment.previewUrl}
+                      alt="Selected attachment"
+                      className="w-12 h-12 rounded-xl object-cover border border-gray-200 dark:border-paper-400"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center flex-shrink-0">
+                      <Mic size={17} />
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs font-semibold text-gray-800 dark:text-gray-100 truncate">
+                      {attachment.type === 'image' ? attachment.name : `Voice recording · ${formatDuration(attachment.duration)}`}
+                    </div>
+                    {attachment.type === 'image' ? (
+                      <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">Ready to analyze</div>
+                    ) : (
+                      <audio controls preload="metadata" src={attachment.previewUrl} className="h-7 w-full max-w-[240px] mt-1" />
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => replaceAttachment(null)}
+                    aria-label="Remove attachment"
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-700 dark:hover:text-gray-100 hover:bg-gray-200 dark:hover:bg-paper-300 transition-colors"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              )}
+
               <form onSubmit={handleSubmit} className="flex items-center gap-3 px-4 py-3 sm:p-4">
+                <div className="relative flex-shrink-0" ref={attachmentMenuRef}>
+                  <button
+                    type="button"
+                    onClick={() => setAttachmentMenuOpen(open => !open)}
+                    disabled={isRecording}
+                    aria-label="Add attachment"
+                    aria-expanded={attachmentMenuOpen}
+                    className="w-9 h-9 rounded-full flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-paper-200 disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-black/10 dark:focus-visible:ring-white/20 transition-colors"
+                  >
+                    <Plus size={21} strokeWidth={1.8} />
+                  </button>
+
+                  {attachmentMenuOpen && (
+                    <div className="absolute left-0 bottom-full mb-3 w-64 p-1.5 rounded-2xl bg-white dark:bg-paper-200 border border-gray-200 dark:border-paper-300 shadow-xl z-[70] animate-fade-in">
+                      <button
+                        type="button"
+                        onClick={() => imageInputRef.current?.click()}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left hover:bg-gray-50 dark:hover:bg-paper-300 transition-colors"
+                      >
+                        <span className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                          <ImageIcon size={18} />
+                        </span>
+                        <span>
+                          <span className="block text-sm font-semibold text-gray-800 dark:text-gray-100">Add photo</span>
+                          <span className="block text-[11px] text-gray-500 dark:text-gray-400">JPG or PNG · up to 5 MB</span>
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={loading}
+                        onClick={() => {
+                          setAttachmentMenuOpen(false)
+                          startAudioRecording()
+                        }}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left hover:bg-gray-50 dark:hover:bg-paper-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      >
+                        <span className="w-9 h-9 rounded-xl bg-violet-50 dark:bg-violet-500/10 text-violet-600 dark:text-violet-400 flex items-center justify-center">
+                          <Mic size={18} />
+                        </span>
+                        <span>
+                          <span className="block text-sm font-semibold text-gray-800 dark:text-gray-100">Record audio</span>
+                          <span className="block text-[11px] text-gray-500 dark:text-gray-400">Attach a voice message</span>
+                        </span>
+                      </button>
+                    </div>
+                  )}
+                  <input
+                    ref={imageInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png"
+                    onChange={handleImageSelected}
+                    className="hidden"
+                  />
+                </div>
+
                 <input
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder={currentModeConfig.placeholder}
+                  placeholder={isRecording ? 'Listening…' : currentModeConfig.placeholder}
                   className="flex-1 bg-transparent text-[15px] sm:text-[16px] leading-relaxed text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none min-w-0"
-                  disabled={loading}
+                  disabled={isRecording}
                   autoFocus
                 />
-                <button
-                  type="submit"
-                  disabled={loading || !input.trim()}
-                  className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${input.trim()
-                    ? `${currentStyle.sendBg} scale-100 shadow-md active:scale-90`
-                    : 'bg-gray-100 dark:bg-paper-200 text-gray-400 dark:text-gray-500 scale-95 hover:bg-gray-200 dark:hover:bg-paper-300/80 cursor-not-allowed'
-                    }`}
-                >
-                  {loading ? (
-                    <div className="flex items-center gap-0.5">
-                      <div className="w-1.5 h-1.5 bg-current rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                      <div className="w-1.5 h-1.5 bg-current rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                      <div className="w-1.5 h-1.5 bg-current rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                    </div>
-                  ) : (
+
+                {isRecording && (
+                  <div className="flex items-center gap-2 text-xs font-semibold text-red-500 tabular-nums">
+                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                    {formatDuration(recordingSeconds)}
+                  </div>
+                )}
+
+                {loading ? (
+                  <button
+                    type="button"
+                    onClick={stopProcessing}
+                    aria-label="Stop response"
+                    title="Stop response"
+                    className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-gray-900 dark:bg-white text-white dark:text-black shadow-md hover:scale-105 active:scale-90 transition-transform"
+                  >
+                    <Square size={13} fill="currentColor" />
+                  </button>
+                ) : isRecording ? (
+                  <button
+                    type="button"
+                    onClick={stopAudioRecording}
+                    aria-label="Stop recording"
+                    className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-red-500 text-white hover:bg-red-600 shadow-md active:scale-90 transition-all"
+                  >
+                    <Square size={15} fill="currentColor" />
+                  </button>
+                ) : !input.trim() && !attachment ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (voiceSessionOpen && (voiceSessionStatus === 'speaking' || voiceSessionStatus === 'processing')) {
+                        interruptVoiceAndListen()
+                      } else if (voiceSessionOpen) {
+                        startVoiceListeningRef.current?.()
+                      } else {
+                        openVoiceSession()
+                      }
+                    }}
+                    aria-label={voiceSessionOpen ? 'Interrupt and speak' : 'Start voice conversation'}
+                    title={voiceSessionOpen ? 'Interrupt and speak' : 'Start voice conversation'}
+                    className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-gray-100 dark:bg-paper-200 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-paper-300 active:scale-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-black/10 dark:focus-visible:ring-white/20 transition-all"
+                  >
+                    <AudioLines size={19} strokeWidth={2} />
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    aria-label="Send message"
+                    className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${currentStyle.sendBg} scale-100 shadow-md active:scale-90`}
+                  >
                     <Send size={18} strokeWidth={2} className="ml-0.5" />
-                  )}
-                </button>
+                  </button>
+                )}
               </form>
             </div>
 
           </div>
         </div>
       </div>
+
+      {voiceSessionOpen && (
+        <div className="fixed bottom-[13rem] lg:bottom-48 left-0 right-0 lg:left-64 z-[80] px-3 pointer-events-none animate-fade-in">
+          <h2 className="sr-only">Voice conversation</h2>
+          <div className="pointer-events-auto mx-auto w-full max-w-sm flex items-center gap-3 rounded-[1.4rem] border border-gray-200/80 dark:border-white/10 bg-white/95 dark:bg-paper-100/95 backdrop-blur-xl p-2.5 shadow-[0_16px_48px_rgba(0,0,0,0.16)] dark:shadow-[0_18px_56px_rgba(0,0,0,0.5)]">
+            <button
+              type="button"
+              onClick={() => {
+                if (voiceSessionStatus === 'speaking' || voiceSessionStatus === 'processing') interruptVoiceAndListen()
+                else if (voiceSessionStatus === 'paused') toggleVoicePause()
+                else if (voiceSessionStatus === 'idle') startVoiceListeningRef.current?.()
+              }}
+              aria-label={voiceSessionStatus === 'speaking' || voiceSessionStatus === 'processing' ? 'Interrupt and speak' : voiceSessionStatus === 'paused' ? 'Resume conversation' : 'Voice conversation control'}
+              className="relative w-14 h-14 rounded-full flex-shrink-0 flex items-center justify-center shadow-[0_8px_24px_rgba(37,99,235,0.28)] active:scale-95 transition-transform overflow-hidden"
+            >
+              <span className={`absolute inset-0 bg-[radial-gradient(circle_at_35%_25%,#ffffff_0%,#bfdbfe_22%,#3b82f6_58%,#1d4ed8_100%)] ${voiceSessionStatus === 'listening' ? 'animate-pulse' : ''}`} />
+              <span className={`absolute inset-1.5 rounded-full border border-white/40 ${voiceSessionStatus === 'processing' ? 'animate-spin' : ''}`} style={{ borderRightColor: 'transparent', animationDuration: '1.4s' }} />
+              <span className="relative z-10 w-8 h-8 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-white shadow-inner">
+                {voiceSessionStatus === 'paused'
+                  ? <Play size={16} fill="currentColor" />
+                  : voiceSessionStatus === 'idle'
+                    ? <Mic size={17} />
+                    : voiceSessionStatus === 'speaking'
+                      ? <Mic size={17} />
+                      : <AudioLines size={17} />}
+              </span>
+            </button>
+
+            <div className="min-w-0 flex-1 px-0.5">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-blue-600 dark:text-blue-400">
+                {voiceSessionStatus === 'listening' && 'Listening'}
+                {voiceSessionStatus === 'processing' && 'Responding'}
+                {voiceSessionStatus === 'speaking' && 'Speaking'}
+                {voiceSessionStatus === 'idle' && 'Ready'}
+                {voiceSessionStatus === 'paused' && 'Paused'}
+              </p>
+              {voiceSessionStatus === 'idle' && !voiceContinueListeningRef.current && voiceSessionText && (
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 truncate">{voiceSessionText}</p>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={closeVoiceSession}
+              aria-label="Close voice conversation"
+              className="w-9 h-9 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/10 active:scale-90 transition-all"
+            >
+              <X size={17} />
+            </button>
+          </div>
+        </div>
+      )}
 
       <DeleteConfirmationModal
         isOpen={showDeleteConfirm}

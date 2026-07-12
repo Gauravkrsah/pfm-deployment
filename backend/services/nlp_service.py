@@ -1,8 +1,13 @@
 import re
 import json
 import os
+import base64
+import binascii
+import httpx
 from difflib import get_close_matches
 from typing import List, Dict, Any, Optional
+from utils.assistant_output import final_answer_only
+from utils.text_normalization import clean_spoken_text, first_name
 
 # pyre-ignore[21]
 from dotenv import load_dotenv
@@ -20,11 +25,15 @@ load_dotenv()
 DEFAULT_NIM_BASE_URL = "https://integrate.api.nvidia.com/v1"
 DEFAULT_NIM_MODEL = "nvidia/nemotron-3-super-120b-a12b"
 DEFAULT_NIM_ENTRY_MODEL = "nvidia/llama-3.1-nemotron-nano-8b-v1"
+FAST_ENTRY_MODEL = "nvidia/llama-3.1-nemotron-nano-8b-v1"
+DEFAULT_MULTIMODAL_MODEL = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
+DEFAULT_TTS_URL = "https://877104f7-e885-42b9-8de8-f6e4c6303969.invocation.api.nvcf.nvidia.com/v1/audio/synthesize"
+DEFAULT_TTS_VOICE = "Magpie-Multilingual.EN-US.Aria"
 
 class ExpenseParser:
     def __init__(self):
         self.categories = {
-            'food': ['biryani', 'pizza', 'restaurant', 'meal', 'lunch', 'dinner', 'food', 'cafe', 'snack', 'tea', 'coffee', 'breakfast', 'momo', 'momos', 'noodles', 'chowmein', 'chowmin', 'chow', 'ramen', 'pasta', 'rice', 'dal', 'curry', 'khana', 'khaana', 'chiya', 'chai', 'dudh', 'milk', 'bhat', 'daal', 'tarkari', 'sabji', 'machha', 'fish', 'chicken', 'mutton', 'buff', 'pork', 'egg', 'anda', 'roti', 'chapati', 'paratha', 'samosa', 'pakoda', 'chaat', 'lassi', 'lasi', 'juice', 'paani', 'water', 'drink', 'beverage', 'ice cream', 'dessert', 'sweets', 'mithai', 'masala', 'paneer', 'veg', 'non-veg', 'burger', 'sandwich', 'roll', 'wrap', 'kathi', 'tikka', 'kebab', 'tandoori'],
+            'food': ['biryani', 'pizza', 'restaurant', 'meal', 'lunch', 'dinner', 'food', 'cafe', 'snack', 'tea', 'coffee', 'breakfast', 'momo', 'momos', 'noodles', 'chowmein', 'chowmin', 'chow', 'ramen', 'pasta', 'rice', 'dal', 'curry', 'khana', 'khaana', 'chiya', 'chai', 'dudh', 'milk', 'bhat', 'daal', 'tarkari', 'sabji', 'machha', 'fish', 'chicken', 'mutton', 'buff', 'pork', 'egg', 'anda', 'roti', 'chapati', 'paratha', 'samosa', 'pakoda', 'pakora', 'chaat', 'lassi', 'lasi', 'juice', 'paani', 'water', 'drink', 'beverage', 'ice cream', 'dessert', 'sweets', 'mithai', 'masala', 'paneer', 'veg', 'non-veg', 'burger', 'sandwich', 'roll', 'wrap', 'kathi', 'tikka', 'kebab', 'tandoori', 'thekuwa', 'thekua', 'sel roti', 'yomari', 'chatamari', 'bara', 'wo', 'kwati', 'jeri', 'jerry', 'puri'],
             'transport': ['petrol', 'fuel', 'taxi', 'uber', 'bus', 'train', 'auto', 'rickshaw', 'metro', 'flight', 'travel', 'tempo', 'microbus', 'bike', 'scooter', 'car', 'gaadi', 'diesel', 'parking', 'garage', 'toll', 'service', 'repair', 'ac', 'cooler', 'pump', 'motor'],
             'groceries': ['grocery', 'groceries', 'vegetables', 'fruits', 'market', 'supermarket', 'store', 'milk', 'bread', 'apple', 'garlic', 'potato', 'onion', 'tomato', 'sabji', 'tarkari', 'fruits', 'phal', 'alu', 'pyaj', 'lasun', 'dhaniya', 'hariyo', 'green', 'oil', 'salt', 'sugar', 'spices', 'shampoo', 'soap', 'detergent', 'paste', 'brush', 'oil', 'cream', 'powder', 'tissue', 'paper', 'napkin', 'sanitizer', 'bucket', 'mug', 'mop', 'broom'],
             'shopping': ['clothes', 'shoes', 'shopping', 'shirt', 'dress', 'bag', 'accessories', 'kapada', 'jutta', 'chappals', 'sandals', 'pant', 'jeans', 'tshirt', 'jacket', 'watch', 'belt', 'perfume', 'deo', 'makeup', 'lipstick', 'liner', 'mascara', 'polish', 'remover', 'gift', 'present'],
@@ -113,7 +122,7 @@ class ExpenseParser:
 
     def parse(self, text):
         expenses = []
-        text = text.strip()
+        text = self._normalise_entry_command(text)
         
         # FIRST: Normalize numbers with commas (100,000 -> 100000)
         # Match patterns like 100,000 or 1,00,000 (Indian format)
@@ -135,7 +144,9 @@ class ExpenseParser:
     
     def _parse_single_expense(self, text):
         """Parse a single expense from text with multiple pattern matching"""
-        text = text.strip()
+        text = self._normalise_entry_command(text)
+        if not text:
+            return None
         
         # ============== LOAN REPAYMENT PATTERNS (4 scenarios) ==============
         # 1. BORROWED: I borrow from someone (money comes in, I owe them)
@@ -422,6 +433,27 @@ class ExpenseParser:
                     'remarks': f"Lent to {person.title()}",
                     'paid_by': person.title()
                 }
+
+        # Pattern: "i paid 5000 for food of ram" / "paid 5000 for ram's food"
+        # In loan mode this means the user covered an expense for someone.
+        paid_for_person_patterns = [
+            r'^(?:i\s+)?(?:paid|payed)\s+(\d+)\s+for\s+([a-zA-Z]+)\s+of\s+(?:his|her|their)\b',
+            r'^(?:i\s+)?(?:paid|payed)\s+(\d+)\s+for\s+.+?\s+of\s+([a-zA-Z]+)(?:\s+|$)',
+            r'^(?:i\s+)?(?:paid|payed)\s+(\d+)\s+for\s+([a-zA-Z]+)(?:\'s|s)?\s+.+',
+        ]
+        for paid_for_person_pattern in paid_for_person_patterns:
+            paid_for_person_match = re.match(paid_for_person_pattern, text, re.IGNORECASE)
+            if paid_for_person_match:
+                amount, person = paid_for_person_match.groups()
+                if self._is_likely_person(person):
+                    return {
+                        'amount': int(amount),  # Positive = money going out; they owe me
+                        'item': 'lent to',
+                        'category': 'Loan',
+                        'remarks': f"Paid expense for {person.title()}",
+                        'paid_by': person.title(),
+                        'needs_confirmation': False
+                    }
         
         # ============== AMBIGUOUS PATTERNS (need confirmation) ==============
         
@@ -1107,27 +1139,53 @@ class ExpenseParser:
         return True
 
     def _generate_detailed_remark(self, item, category):
-        """Generate a more professional remark based on category"""
-        item_title = item.title()
-        item_lower = item.lower()
-        cat_lower = category.lower()
-        
-        if cat_lower == 'food':
-            return f"Food: {item_title}" if 'food' in item_lower else f"Spent on {item_title}"
-        elif cat_lower == 'shopping':
-            return f"Purchased {item_title}"
-        elif cat_lower == 'transport':
-            return f"Travelled by {item_title}" if any(w in item_lower for w in ['taxi', 'bus', 'uber']) else f"Spent on {item_title}"
-        elif cat_lower == 'groceries':
-            return f"Grocery: {item_title}"
-        elif cat_lower == 'utilities':
-            return f"Paid {item_title}" if 'bill' in item_lower else f"Paid {item_title} Bill"
-        elif cat_lower == 'entertainment':
-            return f"Entertainment: {item_title}"
-        elif cat_lower == 'education':
-            return f"Education: {item_title}"
-        
-        return item_title
+        """Use a factual item note instead of inventing context-specific prose."""
+        cleaned = self._clean_item_name(str(item or ""))
+        if not cleaned:
+            return "Transaction note"
+        if str(category or "").lower() == "income":
+            return f"Income from {cleaned.title()}"
+        if str(category or "").lower() == "rent":
+            return f"{cleaned.title()} payment"
+        return cleaned.title()
+
+    def _normalise_entry_command(self, text):
+        """Remove assistant-command wording so only the transaction remains."""
+        text = clean_spoken_text(text)
+        text = re.sub(r'\s+', ' ', text).strip()
+        text = re.sub(
+            r'^(?:can|could|would)\s+you\s+(?:please\s+)?',
+            '',
+            text,
+            flags=re.IGNORECASE,
+        ).strip()
+        text = re.sub(
+            r'^(?:please\s+)?(?:add|record|save|log|put|enter)\s+(?:this\s+)?(?:as\s+)?',
+            '',
+            text,
+            flags=re.IGNORECASE,
+        ).strip()
+        text = re.sub(
+            r'\b(?:in|to|as|under)\s+(?:the\s+)?(?:expense|expenses|income|loan|loans)\b',
+            ' ',
+            text,
+            flags=re.IGNORECASE,
+        )
+        text = re.sub(
+            r'\b(?:expense|income|loan)\s+(?:entry|transaction|record)\b',
+            ' ',
+            text,
+            flags=re.IGNORECASE,
+        )
+        text = re.sub(
+            r'\s+(?:for|of)\s+(?:rs\.?|npr|रु\.?)?\s*(\d[\d,]*(?:\.\d+)?)\s*$',
+            r' \1',
+            text,
+            flags=re.IGNORECASE,
+        )
+        text = re.sub(r'^\s*(?:for|on)\s+', '', text, flags=re.IGNORECASE)
+        text = re.sub(r'\s+', ' ', text).strip(' \t\r\n-:;,.')
+        return text
 
     def _is_placeholder_remark(self, remark):
         return str(remark or "").strip().lower() in {
@@ -1145,15 +1203,32 @@ class ExpenseParser:
         """Replace generic model placeholders with a note tied to the actual item."""
         if not remark or self._is_placeholder_remark(remark):
             return self._generate_detailed_remark(item, category)
-        return str(remark).strip()
+        cleaned = re.sub(
+            rf'^\s*{re.escape(str(category or ""))}\s*:\s*',
+            '',
+            str(remark),
+            flags=re.IGNORECASE,
+        ).strip(' \t\r\n-:;,.')
+        cleaned = re.sub(
+            r'^(?:food|groceries|transport|utilities|rent|shopping|medical|entertainment|education|travel|accommodation|electronics|personal care|fitness|gifts|finance|maintenance|income|loan|other)\s*:\s*',
+            '',
+            cleaned,
+            flags=re.IGNORECASE,
+        ).strip(' \t\r\n-:;,.')
+        if not cleaned or re.search(r'\b(expense entry|transaction entry|short summary)\b', cleaned, re.IGNORECASE):
+            return self._generate_detailed_remark(item, category)
+        return cleaned[:160]
 
     def _clean_item_name(self, item):
         """Clean and normalize item names"""
-        item = item.strip()
+        item = self._normalise_entry_command(item)
+        item = re.sub(r'^(?:expense|income|loan)?\s*(?:entry|transaction)\s*:\s*', '', item, flags=re.IGNORECASE)
         # Strip common verbs/articles from start
-        item = re.sub(r'^(had|ate|took|got|bought|buy|ordered|spent|paid|for|on)\s+', '', item, flags=re.IGNORECASE)
+        item = re.sub(r'^(had|ate|took|got|bought|buy|ordered|spent|paid|for|on|add|record|save|log|enter)\s+', '', item, flags=re.IGNORECASE)
+        item = re.sub(r'\b(?:in|to|as|under)\s+(?:the\s+)?(?:expense|expenses|income|loan|loans)\b', ' ', item, flags=re.IGNORECASE)
+        item = re.sub(r'\s+(?:for|of)\s+(?:rs\.?|npr|रु\.?)?\s*\d[\d,]*(?:\.\d+)?\s*$', '', item, flags=re.IGNORECASE)
         item = re.sub(r'\b(the|a|an)\b', '', item, flags=re.IGNORECASE)
-        item = re.sub(r'\s+', ' ', item).strip()
+        item = re.sub(r'\s+', ' ', item).strip(' \t\r\n-:;,.')
         
         nepali_mappings = {
             'chowmin': 'chowmein', 'chow min': 'chowmein',
@@ -1207,12 +1282,20 @@ class ExpenseParser:
 
         return re.sub(r'\b[a-zA-Z]+\b', replace_token, text)
     
+    def _contains_category_keyword(self, description, keyword):
+        """Match complete words/phrases so `pen` never matches `spent`."""
+        keyword_pattern = r'\s+'.join(re.escape(part) for part in str(keyword).lower().split())
+        return bool(re.search(rf'(?<!\w){keyword_pattern}(?!\w)', str(description).lower()))
+
+    def _contains_any_category_keyword(self, description, keywords):
+        return any(self._contains_category_keyword(description, keyword) for keyword in keywords)
+
     def _categorize(self, description):
         description_lower = description.lower()
         
         # Check existing categories first
         for category, keywords in self.categories.items():
-            if any(keyword in description_lower for keyword in keywords):
+            if self._contains_any_category_keyword(description_lower, keywords):
                 return category.title()
         
         # Smart category creation for unknown items
@@ -1221,43 +1304,43 @@ class ExpenseParser:
     def _smart_categorize(self, description):
         """Create intelligent categories for unknown items"""
         # Electronics & Appliances
-        if any(word in description for word in ['fan', 'ac', 'tv', 'fridge', 'laptop', 'phone', 'mobile', 'computer', 'tablet', 'camera', 'speaker', 'headphone', 'charger', 'appliance', 'electronic']):
+        if self._contains_any_category_keyword(description, ['fan', 'ac', 'tv', 'fridge', 'laptop', 'phone', 'mobile', 'computer', 'tablet', 'camera', 'speaker', 'headphone', 'charger', 'appliance', 'electronic']):
             return 'Electronics'
         
         # Travel & Accommodation
-        if any(word in description for word in ['hotel', 'stay', 'booking', 'resort', 'lodge', 'airbnb', 'hostel']):
+        if self._contains_any_category_keyword(description, ['hotel', 'stay', 'booking', 'resort', 'lodge', 'airbnb', 'hostel']):
             return 'Travel'
         
         # Medical & Health
-        if any(word in description for word in ['doctor', 'medicine', 'hospital', 'clinic', 'pharmacy', 'medical', 'health']):
+        if self._contains_any_category_keyword(description, ['doctor', 'medicine', 'hospital', 'clinic', 'pharmacy', 'medical', 'health']):
             return 'Medical'
         
         # Education - Enhanced
-        if any(word in description for word in ['admission', 'fee', 'tuition', 'school', 'college', 'university', 'course', 'class', 'book', 'study', 'education', 'exam', 'test']):
+        if self._contains_any_category_keyword(description, ['admission', 'fee', 'tuition', 'school', 'college', 'university', 'course', 'class', 'book', 'study', 'education', 'exam', 'test']):
             return 'Education'
         
         # Beauty & Personal Care
-        if any(word in description for word in ['salon', 'haircut', 'beauty', 'cosmetic', 'spa', 'massage']):
+        if self._contains_any_category_keyword(description, ['salon', 'haircut', 'beauty', 'cosmetic', 'spa', 'massage']):
             return 'Personal Care'
         
         # Gifts & Donations
-        if any(word in description for word in ['gift', 'present', 'donation', 'charity', 'birthday']):
+        if self._contains_any_category_keyword(description, ['gift', 'present', 'donation', 'charity', 'birthday']):
             return 'Gifts'
         
         # Insurance & Finance
-        if any(word in description for word in ['insurance', 'premium', 'policy', 'bank', 'fee', 'charge']):
+        if self._contains_any_category_keyword(description, ['insurance', 'premium', 'policy', 'bank', 'fee', 'charge']):
             return 'Finance'
         
         # Maintenance & Repair
-        if any(word in description for word in ['repair', 'fix', 'maintenance', 'service', 'cleaning']):
+        if self._contains_any_category_keyword(description, ['repair', 'fix', 'maintenance', 'service', 'cleaning']):
             return 'Maintenance'
         
         # Sports & Fitness
-        if any(word in description for word in ['gym', 'fitness', 'sport', 'exercise', 'yoga', 'swimming']):
+        if self._contains_any_category_keyword(description, ['gym', 'fitness', 'sport', 'exercise', 'yoga', 'swimming']):
             return 'Fitness'
         
         # Food/Drinks - catch common items
-        if any(word in description for word in ['chiya', 'chai', 'tea', 'coffee', 'drink', 'beverage', 'snack']):
+        if self._contains_any_category_keyword(description, ['chiya', 'chai', 'tea', 'coffee', 'drink', 'beverage', 'snack']):
             return 'Food'
         
         return 'Other'
@@ -1293,6 +1376,12 @@ class NLPService:
         self.nim_client = None
         self.nim_model = os.getenv("NVIDIA_NIM_MODEL", DEFAULT_NIM_MODEL)
         self.nim_entry_model = os.getenv("NVIDIA_NIM_ENTRY_MODEL", DEFAULT_NIM_ENTRY_MODEL)
+        self.nim_multimodal_model = os.getenv("NVIDIA_NIM_MULTIMODAL_MODEL", DEFAULT_MULTIMODAL_MODEL)
+        self.nim_tts_url = os.getenv("NVIDIA_NIM_TTS_URL", DEFAULT_TTS_URL)
+        self.nim_tts_voice = os.getenv("NVIDIA_NIM_TTS_VOICE", DEFAULT_TTS_VOICE)
+        if self.nim_entry_model != FAST_ENTRY_MODEL:
+            print(f"[NIM] Using fastest entry model {FAST_ENTRY_MODEL} instead of {self.nim_entry_model}")
+            self.nim_entry_model = FAST_ENTRY_MODEL
         self.parser = ExpenseParser()
         self._setup_nim()
         # Initialize RAG service
@@ -1324,9 +1413,411 @@ class NLPService:
                     max_retries=0,
                 )
                 self.nim_available = True
-                print(f"SUCCESS: NVIDIA NIM configured ({self.nim_model})")
+                print(f"SUCCESS: NVIDIA NIM configured (chat={self.nim_model}, entry={self.nim_entry_model})")
             except Exception as e:
                 print(f"ERROR: NVIDIA NIM setup failed: {e}")
+
+    def _rule_based_intent(self, text: str) -> dict:
+        """Classify clear questions and transaction statements without a model call."""
+        normalized = re.sub(r"\s+", " ", str(text or "").strip().lower())
+        if not normalized:
+            return {"intent": "chat", "confidence": 1.0, "reason": "empty input", "source": "rules"}
+
+        has_amount = bool(re.search(r"(?:rs\.?|रु\.?|npr\s*)?\s*\d[\d,]*(?:\.\d+)?", normalized))
+        entry_command = bool(re.search(r"\b(add|log|record|save|track|enter)\b", normalized))
+        question_start = bool(re.match(
+            r"^(how|what|when|where|why|who|which|can|could|would|should|do|did|does|is|are|am|was|were|have|has|show|tell|list|compare)\b",
+            normalized,
+        ))
+        question_phrase = bool(re.search(
+            r"\b(how much|how many|do i|did i|have i|what is|what are|show me|tell me|can you|could you)\b",
+            normalized,
+        ))
+        analytical_request = bool(re.search(
+            r"\b(total|summary|breakdown|history|average|report|compare|comparison|above|below|over|under|most|least|highest|lowest)\b",
+            normalized,
+        ))
+        period_reference = bool(re.search(
+            r"\b(today|yesterday|this\s+(?:week|month|year)|last\s+\d*\s*(?:days?|weeks?|months?|years?))\b",
+            normalized,
+        ))
+
+        # A courteous command such as "can you add lunch 300" is still an entry.
+        if (
+            "?" in normalized
+            or question_start
+            or question_phrase
+            or analytical_request
+            or (period_reference and not has_amount)
+        ) and not (entry_command and has_amount):
+            return {"intent": "chat", "confidence": 0.99, "reason": "question wording", "source": "rules"}
+
+        loan_signal = bool(re.search(
+            r"\b(loan|lent|lend|borrow|borrowed|owe|owes|repaid|repay|paid\s+(?:me\s+)?back|got\s+back|gave\s+.*\s+to|received\s+back)\b",
+            normalized,
+        ))
+        income_signal = bool(re.search(
+            r"\b(salary|salry|sallary|income|wage|wages|bonus|freelance|earned|earning|dividend|commission|paycheck|got\s+paid|payment\s+received|credited)\b",
+            normalized,
+        ))
+        expense_signal = bool(re.search(
+            r"\b(spent|bought|purchased|expense|cost|costing|shopping|bill|paid\s+for)\b",
+            normalized,
+        ))
+
+        if loan_signal:
+            return {"intent": "loan", "confidence": 0.98, "reason": "loan transaction wording", "source": "rules"}
+        if income_signal:
+            return {"intent": "income", "confidence": 0.98, "reason": "income source wording", "source": "rules"}
+        if expense_signal or (has_amount and entry_command):
+            return {"intent": "expense", "confidence": 0.97, "reason": "expense entry wording", "source": "rules"}
+
+        if has_amount:
+            transfer_shape = bool(re.search(r"\b(?:to|from)\s+[a-z][a-z.'-]*\b", normalized))
+            if transfer_shape:
+                return {"intent": "loan", "confidence": 0.65, "reason": "ambiguous person-to-person transfer", "source": "rules"}
+            return {"intent": "expense", "confidence": 0.95, "reason": "item and amount entry", "source": "rules"}
+
+        # Transaction-like text gets the relevant tab and its existing amount hint.
+        if expense_signal or entry_command:
+            return {"intent": "expense", "confidence": 0.88, "reason": "expense wording", "source": "rules"}
+
+        return {"intent": "chat", "confidence": 0.95, "reason": "no transaction entry detected", "source": "rules"}
+
+    async def classify_intent(self, text: str, current_mode: str = "chat") -> dict:
+        """Choose a UI input mode only; this method never persists a transaction."""
+        rule_result = self._rule_based_intent(text)
+        if rule_result["confidence"] >= 0.85 or not self.nim_available:
+            return rule_result
+
+        prompt = f"""Classify this personal-finance input by intent only.
+Input: {json.dumps(str(text or ''))}
+Current UI mode: {json.dumps(str(current_mode or 'chat'))}
+
+Return JSON only: {{"intent":"chat|expense|income|loan","confidence":0.0,"reason":"short reason"}}
+
+Rules:
+- chat: any question, request for analysis, totals, history, advice, or explanation—even if it mentions an amount.
+- expense: a statement or command adding a purchase/spend with an amount.
+- income: a statement or command adding earnings, salary, bonus, or received income.
+- loan: a statement or command recording lending, borrowing, repayment, or money transferred to/from a person.
+- Do not extract or calculate transactions. Classify intent only.
+"""
+        response = self.get_nim_response(
+            prompt,
+            model=self.nim_entry_model,
+            max_tokens=100,
+            temperature=0,
+            retries=0,
+            system_prompt="detailed thinking off" if "nemotron-nano" in self.nim_entry_model else None,
+            timeout=float(os.getenv("NVIDIA_NIM_ENTRY_TIMEOUT", "8.0")),
+        )
+        if not response:
+            return rule_result
+
+        try:
+            match = re.search(r"\{.*\}", response, re.DOTALL)
+            parsed = json.loads(match.group(0) if match else response)
+            intent = str(parsed.get("intent") or "").lower()
+            if intent not in {"chat", "expense", "income", "loan"}:
+                return rule_result
+            confidence = max(0.0, min(float(parsed.get("confidence", 0.8)), 1.0))
+            return {
+                "intent": intent,
+                "confidence": confidence,
+                "reason": str(parsed.get("reason") or "AI intent classification")[:120],
+                "source": "nim",
+            }
+        except (TypeError, ValueError, json.JSONDecodeError, AttributeError):
+            return rule_result
+
+    @staticmethod
+    def _prepare_spoken_text(text: str) -> str:
+        """Convert a UI response into concise, speech-safe text without changing facts."""
+        spoken = str(text or "")
+        spoken = re.sub(r"```.*?```", " ", spoken, flags=re.DOTALL)
+        spoken = re.sub(r"[*#`|_]", " ", spoken)
+        spoken = re.sub(r"\bRs\.\s*", "rupees ", spoken, flags=re.IGNORECASE)
+        spoken = re.sub(r"\s+", " ", spoken).strip()
+        if not spoken:
+            raise ValueError("There is no response to speak.")
+        return spoken[:1800]
+
+    def _create_voice_script(self, answer: str) -> str:
+        """Create a short spoken handoff without adding another model call."""
+        source = self._prepare_spoken_text(answer)
+        sentences = re.split(r"(?<=[.!?])\s+", source)
+        script = " ".join(sentences[:3]).strip() or source
+        words = script.split()
+        return " ".join(words[:70])
+
+    async def synthesize_voice(self, text: str) -> bytes:
+        """Generate natural neural speech with NVIDIA Magpie TTS."""
+        api_key = str(os.getenv("NVIDIA_API_KEY") or "").strip()
+        if not api_key:
+            raise RuntimeError("Neural voice is unavailable because NVIDIA NIM is not configured.")
+
+        spoken_text = self._create_voice_script(text)
+        form = {
+            "text": (None, spoken_text),
+            "language": (None, "en-US"),
+            "voice": (None, self.nim_tts_voice),
+            "encoding": (None, "LINEAR_PCM"),
+            "sample_rate_hz": (None, "44100"),
+        }
+        try:
+            timeout_seconds = float(os.getenv("NVIDIA_NIM_TTS_TIMEOUT", "7"))
+            async with httpx.AsyncClient(timeout=httpx.Timeout(timeout_seconds, connect=3.0)) as client:
+                response = await client.post(
+                    self.nim_tts_url,
+                    headers={"Authorization": f"Bearer {api_key}", "Accept": "audio/wav"},
+                    files=form,
+                )
+                response.raise_for_status()
+        except httpx.HTTPError as exc:
+            print(f"[VOICE] NVIDIA Magpie TTS error: {exc}")
+            raise RuntimeError("The neural voice service could not generate speech. Please try again.") from exc
+
+        audio = bytes(response.content)
+        if len(audio) < 44:
+            raise RuntimeError("The neural voice service returned incomplete audio.")
+        return audio
+
+    def _normalise_media_transactions(self, raw_transactions: list, default_intent: str) -> list:
+        """Validate visual extraction without reparsing model prose as user input."""
+        allowed_categories = {
+            "food": "Food", "groceries": "Groceries", "transport": "Transport",
+            "utilities": "Utilities", "rent": "Rent", "shopping": "Shopping",
+            "medical": "Medical", "entertainment": "Entertainment",
+            "education": "Education", "travel": "Travel", "accommodation": "Accommodation",
+            "electronics": "Electronics", "personal care": "Personal Care",
+            "fitness": "Fitness", "gifts": "Gifts", "finance": "Finance",
+            "maintenance": "Maintenance", "income": "Income", "loan": "Loan",
+            "other": "Other",
+        }
+        normalised = []
+        seen = set()
+
+        for raw in list(raw_transactions or [])[:20]:
+            try:
+                amount_text = re.sub(r'[^\d.\-]', '', str(raw.get("amount") or ""))
+                amount_value = float(amount_text)
+                amount = int(amount_value) if amount_value.is_integer() else round(amount_value, 2)
+            except (TypeError, ValueError):
+                continue
+            if not amount:
+                continue
+
+            item = self.parser._clean_item_name(str(raw.get("item") or ""))
+            if not self._is_meaningful_transaction_item(item):
+                continue
+
+            transaction_type = str(raw.get("transaction_type") or default_intent or "expense").lower()
+            if transaction_type not in {"expense", "income", "loan"}:
+                transaction_type = "expense"
+
+            proposed_category = allowed_categories.get(str(raw.get("category") or "").strip().lower(), "Other")
+            local_category = self.parser._categorize(item)
+            if transaction_type == "income":
+                category = "Income"
+                amount = -abs(amount)
+            elif transaction_type == "loan":
+                category = "Loan"
+            else:
+                category = local_category if local_category.lower() != "other" else proposed_category
+                amount = abs(amount)
+
+            try:
+                confidence = max(0.0, min(float(raw.get("confidence", 0.0)), 1.0))
+            except (TypeError, ValueError):
+                confidence = 0.0
+
+            paid_by = str(raw.get("paid_by") or "").strip().title() or None
+            remarks = self.parser._normalise_remark(raw.get("remarks"), item, category)
+            needs_confirmation = (
+                bool(raw.get("needs_confirmation"))
+                or confidence < 0.8
+                or category == "Other"
+            )
+            fingerprint = (item.lower(), abs(float(amount)), transaction_type)
+            if fingerprint in seen:
+                continue
+            seen.add(fingerprint)
+
+            normalised.append({
+                "amount": amount,
+                "item": item.title(),
+                "category": category,
+                "remarks": remarks,
+                "paid_by": paid_by,
+                "needs_confirmation": needs_confirmation,
+                "transaction_type": transaction_type,
+                "confidence": confidence,
+                "ai_classified": True,
+                "media_extracted": True,
+            })
+
+        return normalised
+
+    def _media_transaction_summary(self, transactions: list, media_type: str) -> str:
+        if not transactions:
+            return "I reviewed the image but did not find a complete transaction with both an item and amount."
+        details = ", ".join(
+            f"{transaction['item']} ({self._money_for_reply(abs(transaction['amount']))}, {transaction['category']})"
+            for transaction in transactions[:4]
+        )
+        extra = len(transactions) - 4
+        if extra > 0:
+            details += f", and {extra} more"
+        source = "image" if media_type == "image" else "voice message"
+        return f"From the {source}, I found {len(transactions)} transaction{'s' if len(transactions) != 1 else ''}: {details}."
+
+    def _money_for_reply(self, amount) -> str:
+        value = float(amount or 0)
+        return f"Rs.{value:,.0f}" if value.is_integer() else f"Rs.{value:,.2f}"
+
+    async def understand_media(self, media_type: str, mime_type: str, data: str, prompt: str = "") -> dict:
+        """Turn image/audio input into a safe text message for existing intent routing."""
+        media_type = str(media_type or "").strip().lower()
+        mime_type = str(mime_type or "").strip().lower()
+        prompt = str(prompt or "").strip()[:1000]
+
+        allowed_types = {
+            "image": {"image/jpeg", "image/png"},
+            "audio": {"audio/wav", "audio/x-wav"},
+        }
+        if media_type not in allowed_types or mime_type not in allowed_types[media_type]:
+            raise ValueError("Unsupported media format. Use a JPG/PNG image or WAV audio.")
+
+        encoded_data = str(data or "")
+        if encoded_data.startswith("data:"):
+            encoded_data = encoded_data.split(",", 1)[-1]
+        try:
+            media_bytes = base64.b64decode(encoded_data, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise ValueError("The attached media could not be read.") from exc
+
+        max_size = 5 * 1024 * 1024 if media_type == "image" else 2 * 1024 * 1024
+        if not media_bytes or len(media_bytes) > max_size:
+            size_label = "5 MB" if media_type == "image" else "2 MB"
+            raise ValueError(f"The {media_type} must be smaller than {size_label}.")
+
+        is_jpeg = mime_type == "image/jpeg" and media_bytes.startswith(b"\xff\xd8\xff")
+        is_png = mime_type == "image/png" and media_bytes.startswith(b"\x89PNG\r\n\x1a\n")
+        is_wav = media_type == "audio" and media_bytes.startswith(b"RIFF") and media_bytes[8:12] == b"WAVE"
+        if media_type == "image" and not (is_jpeg or is_png):
+            raise ValueError("The image contents do not match a supported JPG or PNG file.")
+        if media_type == "audio" and not is_wav:
+            raise ValueError("The recording is not a valid WAV audio file.")
+
+        if not self.nim_available or not self.nim_client:
+            raise RuntimeError("Media understanding is unavailable because NVIDIA NIM is not configured.")
+
+        canonical_mime = "audio/wav" if media_type == "audio" else mime_type
+        data_url = f"data:{canonical_mime};base64,{base64.b64encode(media_bytes).decode('ascii')}"
+        if media_type == "audio":
+            instruction = (
+                "Transcribe the spoken audio accurately. Return only the transcript, preserving the speaker's "
+                "financial wording, names, amounts, and whether money was spent, earned, lent, or borrowed."
+            )
+            media_content = {"type": "audio_url", "audio_url": {"url": data_url}}
+        else:
+            user_context = prompt or "No additional text was supplied."
+            instruction = f"""Analyze this image for a personal finance app and return one JSON object only.
+User text: {user_context}
+
+Schema:
+{{"intent":"chat|expense|income|loan","message":"self-contained text for the existing workflow","brief":"one short factual description of the image","transactions":[{{"amount":450,"item":"Groceries","category":"Groceries","remarks":"Groceries from ABC Store","paid_by":null,"transaction_type":"expense","confidence":0.95,"needs_confirmation":false}}]}}
+
+Rules:
+- Preserve whether the user is asking a question or recording a transaction.
+- Allowed categories: Food, Groceries, Transport, Utilities, Rent, Shopping, Medical, Entertainment, Education, Travel, Accommodation, Electronics, Personal Care, Fitness, Gifts, Finance, Maintenance, Income, Loan, Other.
+- Extract a transaction only when both its item/purpose and amount are clearly visible.
+- Never use filler such as "expense entry", "transaction", "money", or "rupees" as the item.
+- Remarks must state only useful visible context such as merchant and item; do not repeat category labels or invent context.
+- For an itemized receipt, return reliable line items OR one receipt total, never both. Do not double-count subtotal, tax, and total.
+- Set confidence below 0.8 and needs_confirmation true when text, amount, category, or loan direction is uncertain.
+- If the image is not a financial record or the user asks a question, transactions must be empty and message must preserve the question plus essential visual facts.
+- Never invent unreadable text or amounts."""
+            media_content = {"type": "image_url", "image_url": {"url": data_url}}
+
+        try:
+            media_request = {
+                "model": self.nim_multimodal_model,
+                "messages": [{
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": instruction},
+                        media_content,
+                    ],
+                }],
+                "temperature": 0.2,
+                "top_p": 0.95,
+                "max_tokens": 600,
+                "stream": False,
+                "extra_body": {"chat_template_kwargs": {"enable_thinking": False}},
+            }
+            if media_type == "image":
+                media_request["response_format"] = {"type": "json_object"}
+
+            response = self.nim_client.with_options(timeout=45.0).chat.completions.create(
+                **media_request,
+            )
+            result = response.choices[0].message.content.strip()
+        except Exception as exc:
+            print(f"[MEDIA] NVIDIA NIM error: {exc}")
+            raise RuntimeError("NVIDIA NIM could not process this media. Please try again.") from exc
+
+        result = re.sub(r"<think>.*?</think>", "", result, flags=re.DOTALL | re.IGNORECASE).strip()
+        if media_type == "audio":
+            result = clean_spoken_text(result)
+        if not result:
+            raise RuntimeError("No usable text could be extracted from the media.")
+
+        if media_type == "image":
+            try:
+                json_match = re.search(r'\{.*\}', result, re.DOTALL)
+                parsed = json.loads(json_match.group(0) if json_match else result)
+            except (json.JSONDecodeError, AttributeError, TypeError) as exc:
+                raise RuntimeError("The image analysis was incomplete. Please try the image again.") from exc
+
+            intent = str(parsed.get("intent") or "chat").lower()
+            if intent not in {"chat", "expense", "income", "loan"}:
+                intent = "chat"
+            transactions = self._normalise_media_transactions(parsed.get("transactions"), intent)
+            message = str(parsed.get("message") or "").strip()
+            brief = str(parsed.get("brief") or "").strip()[:240]
+            if transactions:
+                message = message or "; ".join(
+                    f"{transaction['item']} {abs(transaction['amount'])}" for transaction in transactions
+                )
+                intent = transactions[0]["transaction_type"]
+            elif not message:
+                message = brief or "Describe the attached image."
+                intent = "chat"
+            else:
+                # Never route an image into a write flow without validated structured records.
+                intent = "chat"
+
+            return {
+                "text": message,
+                "brief": brief,
+                "summary": self._media_transaction_summary(transactions, "image") if transactions else brief,
+                "transactions": transactions,
+                "intent": intent,
+                "media_type": media_type,
+                "model": self.nim_multimodal_model,
+            }
+
+        return {
+            "text": result,
+            "brief": "Voice message transcribed.",
+            "summary": "Voice message transcribed and ready to review.",
+            "transactions": [],
+            "intent": None,
+            "media_type": media_type,
+            "model": self.nim_multimodal_model,
+        }
     
     def get_nim_response(
         self,
@@ -1336,6 +1827,7 @@ class NLPService:
         temperature: float = 0.2,
         retries: int = 3,
         system_prompt: Optional[str] = None,
+        timeout: Optional[float] = None,
     ) -> Optional[str]:
         """Get an NVIDIA NIM chat completion with transient-error retries."""
         if not self.nim_client or not self.nim_available:
@@ -1362,8 +1854,12 @@ class NLPService:
                     "stream": False,
                 }
                 if selected_model.startswith("nvidia/nemotron-3-"):
-                    request_options["extra_body"] = {"reasoning_effort": "low"}
-                response = self.nim_client.chat.completions.create(**request_options)
+                    request_options["extra_body"] = {
+                        "top_k": 1,
+                        "chat_template_kwargs": {"enable_thinking": False},
+                    }
+                client = self.nim_client.with_options(timeout=timeout) if timeout else self.nim_client
+                response = client.chat.completions.create(**request_options)
                 if response and response.choices and response.choices[0].message.content:
                     return response.choices[0].message.content.strip()
             except Exception as e:
@@ -1389,7 +1885,7 @@ class NLPService:
         if len(expenses) != 1:
             return expenses
         clear_direction = re.search(
-            r"\b(borrow(?:ed)?|lent|lend|gave\s+loan|loan\s+to|paid\s+(?:me\s+)?back|repaid|returned|got\s+back)\b",
+            r"\b(borrow(?:ed)?|lent|lend|gave\s+loan|loan\s+to|paid\s+(?:me\s+)?back|paid\s+\d+\s+for|repaid|returned|got\s+back)\b",
             text,
             re.IGNORECASE,
         )
@@ -1424,8 +1920,8 @@ class NLPService:
             if amount == 0:
                 continue
 
-            item = str(raw_expense.get("item") or "").strip()
-            if not item:
+            item = self.parser._clean_item_name(str(raw_expense.get("item") or ""))
+            if not self._is_meaningful_transaction_item(item):
                 continue
 
             category = str(raw_expense.get("category") or "").strip().title()
@@ -1444,8 +1940,12 @@ class NLPService:
             else:
                 amount = abs(amount)
                 needs_confirmation = False
-                if not category or category.lower() in {"other", "expense", "general"}:
-                    category = "Miscellaneous"
+                local_category = self.parser._categorize(item)
+                if local_category.lower() != "other":
+                    category = local_category
+                elif not category or category.lower() in {"other", "expense", "general", "miscellaneous"}:
+                    category = "Other"
+                    needs_confirmation = True
 
             remarks = self.parser._normalise_remark(raw_expense.get("remarks"), item, category)
 
@@ -1461,23 +1961,88 @@ class NLPService:
             })
         return normalised
 
+    def _is_meaningful_transaction_item(self, item: str) -> bool:
+        """Reject sentences that mention money but never identify what it was for."""
+        cleaned = re.sub(r'[^a-zA-Z\s]', ' ', str(item or '').lower())
+        generic_words = {
+            'i', 'we', 'my', 'our', 'have', 'has', 'had', 'get', 'got', 'give', 'gave',
+            'spent', 'spend', 'paid', 'pay', 'money', 'cash', 'rupee', 'rupees', 'rs',
+            'expense', 'entry', 'transaction', 'amount', 'payment', 'record', 'add',
+            'the', 'a', 'an', 'this', 'that', 'it', 'on', 'for', 'of', 'to', 'from',
+        }
+        meaningful_words = [
+            word for word in cleaned.split()
+            if len(word) >= 2 and word not in generic_words
+        ]
+        return bool(meaningful_words)
+
+    def _guard_ai_expense_categories(self, expenses: list, text: str) -> list:
+        """Avoid auto-saving model guesses that conflict with obvious local signals."""
+        if not expenses:
+            return expenses
+
+        local_expenses, _ = self.parser.parse(text)
+        if len(local_expenses) == len(expenses):
+            for expense, local_expense in zip(expenses, local_expenses):
+                local_category = str(local_expense.get("category") or "")
+                if local_category.lower() != "other":
+                    expense.update({
+                        "amount": local_expense.get("amount", expense.get("amount")),
+                        "item": local_expense.get("item", expense.get("item")),
+                        "category": local_category,
+                        "remarks": local_expense.get("remarks", expense.get("remarks")),
+                        "paid_by": local_expense.get("paid_by"),
+                        "needs_confirmation": False,
+                    })
+                else:
+                    expense["amount"] = local_expense.get("amount", expense.get("amount"))
+                    expense["item"] = local_expense.get("item", expense.get("item"))
+                    expense["category"] = "Other"
+                    expense["remarks"] = local_expense.get("remarks") or self.parser._generate_detailed_remark(
+                        expense.get("item") or "expense",
+                        "Other",
+                    )
+                    expense["paid_by"] = local_expense.get("paid_by")
+                    expense["needs_confirmation"] = True
+
+        transport_keywords = set(self.parser.categories.get("transport", [])) | {"fuel"}
+        for expense in expenses:
+            category = str(expense.get("category") or "").lower()
+            if category not in {"transport", "fuel"}:
+                continue
+
+            searchable = " ".join([
+                str(text or ""),
+                str(expense.get("item") or ""),
+                str(expense.get("remarks") or ""),
+            ]).lower()
+            if not any(re.search(r"\b" + re.escape(keyword) + r"\b", searchable) for keyword in transport_keywords):
+                expense["category"] = "Other"
+                expense["needs_confirmation"] = True
+                expense["remarks"] = self.parser._generate_detailed_remark(expense.get("item") or "expense", "Other")
+
+        return expenses
+
     def _format_entry_reply(self, expenses: list, mode: str) -> str:
         if not expenses:
             return "I could not identify a transaction with an amount. Please try again."
         if any(exp.get("needs_confirmation") for exp in expenses):
+            if mode == "expense":
+                expense = next(exp for exp in expenses if exp.get("needs_confirmation"))
+                return f"I found Rs.{abs(expense['amount']):,.0f} for {expense.get('item', 'this expense')}. Please choose a category."
             expense = next(exp for exp in expenses if exp.get("needs_confirmation"))
             person = expense.get("paid_by") or "the other person"
             return f"I found a loan entry of Rs.{abs(expense['amount']):,.0f} involving {person}. Please confirm the direction."
         if len(expenses) > 1:
-            return f"Saved {len(expenses)} {mode} entries with automatically selected categories."
+            return f"Done — saved {len(expenses)} {mode} entries with clean categories and remarks."
 
         expense = expenses[0]
         amount = abs(expense["amount"])
         if mode == "income":
-            return f"Saved income of Rs.{amount:,.0f} from {expense['item']}."
+            return f"Done — saved Rs.{amount:,.0f} income from {expense['item']}."
         if mode == "loan":
-            return f"Saved loan transaction of Rs.{amount:,.0f}: {expense['remarks']}."
-        return f"Saved Rs.{amount:,.0f} for {expense['item']} under {expense['category']}."
+            return f"Done — saved Rs.{amount:,.0f} loan transaction: {expense['remarks']}."
+        return f"Done — saved Rs.{amount:,.0f} for {expense['item']} under {expense['category']}."
 
     async def _ai_enhanced_parse(self, text: str, mode: str = "expense"):
         """Use a low-latency NIM model to understand and categorize a new entry."""
@@ -1497,17 +2062,19 @@ Rules:
 - For expense mode, amount is positive and `paid_by` is null unless the text explicitly states another payer. Product words are not people. Example: "haldiram bhujiya 400" is a food/snacks expense, not a payment by Bhujiya.
 - For income mode, amount is negative, category is Income, and item identifies the source.
 - For loan mode, category is Loan and `paid_by` is the counterparty. A loan lent or given to someone is positive. Money borrowed or received from someone is negative. Repaying someone is positive. Money paid back to the user is negative.
-- In loan mode set `needs_confirmation` to true only when direction cannot be reliably identified; explicit wording such as "lent 500 to Ram", "borrowed 500 from Ram", "paid back Ram 500", or "Ram paid me back 500" does not need confirmation.
+- In loan mode, if the user paid for another person's item, treat it as lending to that person. Examples: "I paid 5000 for food of Ram" and "I paid 5000 for Ram's food" mean amount 5000, item "lent to", category "Loan", paid_by "Ram", needs_confirmation false.
+- In loan mode set `needs_confirmation` to true only when direction cannot be reliably identified; explicit wording such as "lent 500 to Ram", "borrowed 500 from Ram", "paid back Ram 500", "Ram paid me back 500", or "paid 5000 for Ram's food" does not need confirmation.
 - Use null for `paid_by` on ordinary purchases. Set it only for an explicitly named payer or a loan counterparty.
 - If there is no meaningful financial entry with an amount, return {{"expenses": []}}.
 """
             response = self.get_nim_response(
                 prompt,
                 model=self.nim_entry_model,
-                max_tokens=700,
+                max_tokens=350,
                 temperature=0,
                 retries=0,
                 system_prompt="detailed thinking off" if "nemotron-nano" in self.nim_entry_model else None,
+                timeout=float(os.getenv("NVIDIA_NIM_ENTRY_TIMEOUT", "8.0")),
             )
             if response:
                 response = response.strip()
@@ -1529,6 +2096,8 @@ Rules:
                         continue
                 if parsed_data is not None:
                     expenses = self._normalise_nim_transactions(parsed_data.get("expenses", []), mode)
+                    if mode == "expense":
+                        expenses = self._guard_ai_expense_categories(expenses, text)
                     if mode == "loan":
                         expenses = self._resolve_explicit_loan_direction(expenses, text)
                     return {
@@ -1579,7 +2148,7 @@ Rules:
     def _apply_mode_to_fallback(self, expenses: list, mode: str, text: str) -> list:
         """Make local parsing consistent with the selected entry mode."""
         clear_loan_direction = re.search(
-            r"\b(borrow(?:ed)?|lent|lend|gave\s+loan|loan\s+to|paid\s+(?:me\s+)?back|repaid|returned|got\s+back)\b",
+            r"\b(borrow(?:ed)?|lent|lend|gave\s+loan|loan\s+to|paid\s+(?:me\s+)?back|paid\s+\d+\s+for|repaid|returned|got\s+back)\b",
             text,
             re.IGNORECASE,
         )
@@ -1595,9 +2164,7 @@ Rules:
                 expense["needs_confirmation"] = not bool(clear_loan_direction)
             else:
                 expense["amount"] = abs(amount)
-                expense["needs_confirmation"] = False
-                if expense.get("category", "").lower() == "other":
-                    expense["category"] = "Miscellaneous"
+                expense["needs_confirmation"] = expense.get("category", "").lower() in {"other", "miscellaneous"}
         return expenses
 
     async def parse_expense(self, text: str, mode: str = "expense"):
@@ -1609,13 +2176,11 @@ Rules:
             print(f"[PARSE] Processing {mode}: {text}")
             
             # Pre-process text to handle units
-            text = self._preprocess_text(text)
+            text = self.parser._normalise_entry_command(self._preprocess_text(text))
             print(f"[PARSE] Pre-processed: {text}")
 
-            # Entry understanding should happen before keyword rules so product names,
-            # loan direction, and useful new categories are interpreted in context.
             if self.nim_available:
-                print(f"[PARSE] Trying fast NVIDIA NIM entry model ({self.nim_entry_model})...")
+                print(f"[PARSE] Trying fastest NVIDIA NIM entry model ({self.nim_entry_model})...")
                 ai_result = await self._ai_enhanced_parse(text, mode)
                 if ai_result is not None:
                     print(f"[PARSE] NIM parsed {len(ai_result.get('expenses', []))} entries")
@@ -1623,6 +2188,11 @@ Rules:
                 print("[PARSE] NIM entry parsing unavailable; using local fallback")
 
             expenses, reply = self.parser.parse(text)
+            if expenses:
+                expenses = [
+                    expense for expense in expenses
+                    if self._is_meaningful_transaction_item(expense.get("item"))
+                ]
             if expenses:
                 expenses = self._apply_mode_to_fallback(expenses, mode, text)
                 return {
@@ -1634,8 +2204,11 @@ Rules:
             # Final fallback: simple extraction
             print("[PARSE] Trying simple extraction...")
             simple_expense = self._simple_extract(text)
-            if simple_expense:
+            if simple_expense and self._is_meaningful_transaction_item(simple_expense.get("item")):
                 expenses = self._apply_mode_to_fallback([simple_expense], mode, text)
+                reply = self._format_entry_reply(expenses, mode)
+            else:
+                expenses = []
                 reply = self._format_entry_reply(expenses, mode)
             
             return {
@@ -1751,10 +2324,11 @@ Rules:
             # Extract user name
             user_name = "there"
             if request.user_name and str(request.user_name).strip():
-                user_name = str(request.user_name).strip()
+                user_name = first_name(request.user_name)
             elif request.user_email:
                 email_name = request.user_email.split('@')[0]
-                user_name = email_name.capitalize()
+                user_name = first_name(email_name)
+            query_text = clean_spoken_text(request.text) if bool(getattr(request, 'voice_mode', False)) else request.text
             
             # Determine context and prepare data
             is_group_mode = bool(request.group_name and request.group_expenses_data)
@@ -1765,14 +2339,17 @@ Rules:
             if self.rag_service:
                 print(f"[CHAT] Using RAG service for query: {request.text}")
                 rag_response = await self.rag_service.query_expenses(
-                    request.text,
+                    query_text,
                     table_data,
                     user_name,
                     getattr(request, 'conversation_history', []),
+                    bool(getattr(request, 'voice_mode', False)),
                 )
                 if rag_response:
-                    print(f"[CHAT] RAG service provided response")
-                    return {"reply": rag_response}
+                    safe_response = final_answer_only(rag_response)
+                    if safe_response:
+                        print(f"[CHAT] RAG service provided response")
+                        return {"reply": safe_response}
                 else:
                     print(f"[CHAT] RAG service failed, trying direct NVIDIA NIM")
             
@@ -1782,16 +2359,18 @@ Rules:
             # Try a smaller direct prompt only if the richer service produced no response.
             if self.nim_available:
                 print(f"[CHAT] Using direct NVIDIA NIM RAG")
-                nim_response = await self._nim_rag_query(request.text, table_data, analysis, user_name)
+                nim_response = await self._nim_rag_query(query_text, table_data, analysis, user_name)
                 if nim_response:
-                    return {"reply": nim_response}
+                    safe_response = final_answer_only(nim_response)
+                    if safe_response:
+                        return {"reply": safe_response}
             
             # Fallback to rule-based processing
             print(f"[CHAT] Using rule-based analyzer")
             if not table_data:
                 response = f"Hi {user_name}! You don't have any {context_type} transactions recorded yet. Add some records for personalized insights."
                 return {"reply": response}
-            processed_response = analyzer.process_query(request.text, analysis, context_type, table_data)
+            processed_response = analyzer.process_query(query_text, analysis, context_type, table_data)
             final_response = f"Hi {user_name}! {processed_response}"
             return {"reply": final_response}
             
@@ -1851,12 +2430,29 @@ Rules:
         try:
             # Prepare structured data summary
             categories_summary = "\n".join([f"  - {cat.title()}: Rs.{amount}" for cat, amount in analysis['categories'].items()])
+            member_totals = {}
+            for txn in expenses_data or []:
+                try:
+                    amount = float(txn.get('amount') or 0)
+                except (TypeError, ValueError):
+                    amount = 0
+                if amount <= 0 or (txn.get('category') or '').lower() in {'income', 'loan'}:
+                    continue
+                member = txn.get('added_by') or 'Unknown'
+                if member not in member_totals:
+                    member_totals[member] = {'total': 0, 'count': 0}
+                member_totals[member]['total'] += amount
+                member_totals[member]['count'] += 1
+            member_summary = "\n".join([
+                f"  - {member}: Rs.{values['total']:,.0f} across {values['count']} transactions"
+                for member, values in sorted(member_totals.items(), key=lambda item: item[1]['total'], reverse=True)
+            ]) or "  - No member spending totals available"
             
             # Get recent transactions safely preventing list slice type errors for Pyre
             # pyre-ignore[16]
             recent_txns = list(expenses_data)[:10] if int(len(expenses_data)) > 10 else list(expenses_data)
             transactions_text = "\n".join([
-                f"  - Rs.{txn.get('amount', 0)} on {txn.get('item', 'item')} ({txn.get('category', 'Other')}) on {txn.get('date', 'N/A')}"
+                f"  - Rs.{txn.get('amount', 0)} on {txn.get('item', 'item')} ({txn.get('category', 'Other')}) on {txn.get('date', 'N/A')} added_by={txn.get('added_by') or 'Unknown'}"
                 for txn in recent_txns
             ])
             
@@ -1876,6 +2472,9 @@ Net Balance: Rs.{analysis.get('net_balance', 0)}
 Category Breakdown:
 {categories_summary}
 
+Group Member Spending By added_by:
+{member_summary}
+
 Recent Transactions:
 {transactions_text}
 
@@ -1884,9 +2483,11 @@ INSTRUCTIONS:
 2. For general finance questions, provide helpful educational guidance and state when it is not based on user records.
 3. If asked about multiple categories (e.g., "food and grocery"), combine the supplied totals.
 4. Never invent transactions, balances, income, goals, returns, or debt terms.
-5. Start response with "Hi {user_name}!" and be concise but informative.
-6. For high-stakes investment, tax, credit, or legal decisions, give general information and recommend qualified advice where appropriate.
-7. Format currency as Rs.X only, do not use emoji, and normally keep the response under 180 words unless details are requested.
+5. For group member spending questions like "how much Nirmal spent", use Group Member Spending By added_by. added_by is the member who recorded/spent the expense.
+6. Do not use paid_by for ordinary group spending; paid_by is mainly for loan counterparties.
+7. Start response with "Hi {user_name}!" and be concise but informative.
+8. For high-stakes investment, tax, credit, or legal decisions, give general information and recommend qualified advice where appropriate.
+9. Format currency as Rs.X only, do not use emoji, and normally keep the response under 180 words unless details are requested.
 
 Provide a helpful, accurate response:
 """
