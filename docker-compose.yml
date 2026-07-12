@@ -1,0 +1,80 @@
+services:
+  frontend-build:
+    image: node:20-alpine
+    container_name: pfm-frontend-build
+    working_dir: /tmp/app
+    env_file:
+      - ./.env
+    environment:
+      # Browser requests use the current VPS host and are proxied by Nginx.
+      REACT_APP_API_BASE_URL: ""
+      CI: "false"
+    volumes:
+      - ./:/source:ro
+      - frontend_build:/output
+    command: >-
+      sh -c "cp -a /source/. /tmp/app/ &&
+      npm ci &&
+      node node_modules/react-scripts/scripts/build.js &&
+      rm -rf /output/* &&
+      cp -a build/. /output/"
+    restart: "no"
+
+  backend:
+    image: python:3.11-slim
+    container_name: pfm-backend
+    working_dir: /app/backend
+    env_file:
+      - ./backend/.env
+    environment:
+      # The container port is fixed; publish only Nginx to the VPS.
+      PORT: "8000"
+      PYTHONPATH: "/packages"
+    volumes:
+      - ./:/app:ro
+      - backend_packages:/packages
+    command: >-
+      sh -c "python -m pip install --no-cache-dir --target /packages -r requirements.txt &&
+      exec python -m gunicorn main:app
+      --workers ${GUNICORN_WORKERS:-2}
+      --worker-class uvicorn.workers.UvicornWorker
+      --bind 0.0.0.0:8000
+      --access-logfile -
+      --error-logfile -"
+    expose:
+      - "8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5).read()"
+      interval: 10s
+      timeout: 6s
+      retries: 12
+      start_period: 45s
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: pfm-nginx
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - frontend_build:/usr/share/nginx/html:ro
+    depends_on:
+      frontend-build:
+        condition: service_completed_successfully
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  frontend_build:
+  backend_packages:
