@@ -1,27 +1,24 @@
 services:
   frontend-build:
-    image: node:20-alpine
+    image: "${PFM_IMAGE:-pfm:local}"
+    build:
+      context: .
+      args:
+        REACT_APP_SUPABASE_URL: "${REACT_APP_SUPABASE_URL:-}"
+        REACT_APP_SUPABASE_ANON_KEY: "${REACT_APP_SUPABASE_ANON_KEY:-}"
     container_name: pfm-frontend-build
-    working_dir: /tmp/app
-    env_file:
-      - ./.env
-    environment:
-      # Browser requests use the current VPS host and are proxied by Nginx.
-      REACT_APP_API_BASE_URL: ""
-      CI: "false"
     volumes:
-      - ./:/source:ro
       - frontend_build:/output
-    command: >-
-      sh -c "cp -a /source/. /tmp/app/ &&
-      npm ci &&
-      node node_modules/react-scripts/scripts/build.js &&
-      rm -rf /output/* &&
-      cp -a build/. /output/"
+    command: sh -c "rm -rf /output/* && cp -a /app/frontend-build/. /output/"
     restart: "no"
 
   backend:
-    image: python:3.11-slim
+    image: "${PFM_IMAGE:-pfm:local}"
+    build:
+      context: .
+      args:
+        REACT_APP_SUPABASE_URL: "${REACT_APP_SUPABASE_URL:-}"
+        REACT_APP_SUPABASE_ANON_KEY: "${REACT_APP_SUPABASE_ANON_KEY:-}"
     container_name: pfm-backend
     working_dir: /app/backend
     env_file:
@@ -29,18 +26,13 @@ services:
     environment:
       # The container port is fixed; publish only Nginx to the VPS.
       PORT: "8000"
-      PYTHONPATH: "/packages"
-    volumes:
-      - ./:/app:ro
-      - backend_packages:/packages
     command: >-
-      sh -c "python -m pip install --no-cache-dir --target /packages -r requirements.txt &&
-      exec python -m gunicorn main:app
+      gunicorn main:app
       --workers ${GUNICORN_WORKERS:-2}
       --worker-class uvicorn.workers.UvicornWorker
       --bind 0.0.0.0:8000
       --access-logfile -
-      --error-logfile -"
+      --error-logfile -
     expose:
       - "8000"
     healthcheck:
@@ -77,4 +69,3 @@ services:
 
 volumes:
   frontend_build:
-  backend_packages:
