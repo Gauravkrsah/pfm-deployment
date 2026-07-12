@@ -2,13 +2,14 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import axios from 'axios'
 import { Send, MessageCircle, Receipt, Wallet, ArrowLeftRight, Trash2, ChevronLeft, ChevronRight, Plus, Image as ImageIcon, AudioLines, Square, X, Mic, Play } from 'lucide-react'
 import { supabase } from '../supabase'
+import { API_BASE_URL } from '../config/api'
 import DeleteConfirmationModal from './ui/DeleteConfirmationModal'
 
 const getApiBaseUrl = () => {
   if (window.APP_CONFIG && window.APP_CONFIG.API_BASE_URL) {
     return window.APP_CONFIG.API_BASE_URL
   }
-  return ''
+  return API_BASE_URL
 }
 
 const INPUT_MODES = [
@@ -21,7 +22,8 @@ const INPUT_MODES = [
 const REVIEW_CATEGORIES = [
   'Food', 'Groceries', 'Transport', 'Utilities', 'Rent', 'Shopping', 'Medical',
   'Entertainment', 'Education', 'Travel', 'Accommodation', 'Electronics',
-  'Personal Care', 'Fitness', 'Gifts', 'Finance', 'Maintenance', 'Income', 'Loan', 'Other'
+  'Personal Care', 'Fitness', 'Gifts', 'Finance', 'Maintenance', 'Income', 'Loan',
+  'Household Cleaning', 'Furniture', 'Pet Supplies', 'Software Services', 'Other'
 ]
 
 const INPUT_MODE_STORAGE_KEY = 'pfm_input_mode'
@@ -496,7 +498,7 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
 
   useEffect(() => {
     localStorage.setItem(INPUT_MODE_STORAGE_KEY, inputMode)
-  }, [inputMode])
+  }, [inputMode, isVisible])
 
   useEffect(() => {
     localStorage.setItem(AUTO_INTENT_STORAGE_KEY, String(autoIntentEnabled))
@@ -1196,7 +1198,10 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
       return
     }
 
-    if (autoIntentEnabled) {
+    // A manually selected transaction tab with an amount is authoritative.
+    // Skipping the separate intent request leaves only the single NIM parse.
+    const shouldClassifyIntent = autoIntentEnabled && (inputMode === 'chat' || !/\d/.test(userMsg))
+    if (shouldClassifyIntent) {
       if (mediaIntent) {
         resolvedMode = mediaIntent
       } else {

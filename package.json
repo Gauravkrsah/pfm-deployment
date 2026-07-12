@@ -19,9 +19,9 @@
     "recharts": "^2.8.0"
   },
   "scripts": {
-    "start": "CHOKIDAR_USEPOLLING=true WATCHPACK_POLLING=true node --localstorage-file=.node_localstorage node_modules/react-scripts/scripts/start.js",
-    "build": "node --localstorage-file=.node_localstorage node_modules/react-scripts/scripts/build.js",
-    "test": "node --localstorage-file=.node_localstorage node_modules/react-scripts/scripts/test.js --watchAll=false",
+    "start": "CHOKIDAR_USEPOLLING=true WATCHPACK_POLLING=true node -r ./scripts/load-backend-env.js --localstorage-file=.node_localstorage node_modules/react-scripts/scripts/start.js",
+    "build": "node -r ./scripts/load-backend-env.js --localstorage-file=.node_localstorage node_modules/react-scripts/scripts/build.js",
+    "test": "node -r ./scripts/load-backend-env.js --localstorage-file=.node_localstorage node_modules/react-scripts/scripts/test.js --watchAll=false",
     "eject": "react-scripts eject",
     "start:backend": "PYTHONPATH=backend venv/bin/python backend/main.py",
     "dev": "concurrently \"npm run start:backend\" \"npm start\"",

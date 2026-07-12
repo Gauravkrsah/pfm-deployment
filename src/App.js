@@ -243,8 +243,7 @@ function App() {
           setChatKey(k => k + 1)
         }}
       >
-        {activeTab === 'chat' && (
-          <div className="flex flex-col h-full relative">
+        <div className={`${activeTab === 'chat' ? 'flex' : 'hidden'} flex-col h-full relative`}>
             <div className="hidden lg:block flex-shrink-0 p-4 lg:p-8 lg:pt-8 max-w-7xl mx-auto w-full">
               <GroupManager
                 user={user}
@@ -263,7 +262,7 @@ function App() {
                 onTableRefresh={handleTableRefresh}
                 user={user}
                 currentGroup={currentGroup}
-                isVisible={true}
+                isVisible={activeTab === 'chat'}
                 showMessagesArea={true}
                 onClearChat={() => {
                   localStorage.removeItem('pfm_messages')
@@ -271,8 +270,7 @@ function App() {
                 }}
               />
             </div>
-          </div>
-        )}
+        </div>
 
         {activeTab === 'expenses' && (
           <div className="flex flex-col h-full relative">

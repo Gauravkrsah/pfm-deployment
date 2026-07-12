@@ -1,11 +1,13 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 import os
+from pathlib import Path
 from dotenv import load_dotenv
+
+load_dotenv(dotenv_path=Path(__file__).with_name(".env"), override=True)
+
 from api.expenses import router as expenses_router
 from api.auth import router as auth_router
-
-load_dotenv(override=True)
 
 app = FastAPI(
     title="Personal Finance Manager API",
