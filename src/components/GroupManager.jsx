@@ -4,7 +4,7 @@ import { useToast } from './Toast'
 import DeleteConfirmationModal from './ui/DeleteConfirmationModal'
 import { syncUserProfile } from '../utils/profile'
 
-export default function GroupManager({ user, currentGroup, onGroupChange, onClearChat }) {
+export default function GroupManager({ user, currentGroup, onGroupChange, onClearChat, compact = false }) {
   const [groups, setGroups] = useState([])
   const [showCreate, setShowCreate] = useState(false)
   const [groupName, setGroupName] = useState('')
@@ -375,7 +375,7 @@ export default function GroupManager({ user, currentGroup, onGroupChange, onClea
 
   return (
     <>
-      {invitations.filter(i => !dismissedInvites.includes(i.id)).length > 0 && (
+      {!compact && invitations.filter(i => !dismissedInvites.includes(i.id)).length > 0 && (
         <div className="mb-2 p-2 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border border-blue-100 dark:border-blue-800/30 rounded-xl shadow-sm animate-fade-in relative group/card">
           <div className="flex items-center gap-2 mb-1.5">
             <span className="bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-300 p-1 rounded-md text-xs">📧</span>
@@ -418,19 +418,19 @@ export default function GroupManager({ user, currentGroup, onGroupChange, onClea
 
 
       {/* ── Group bar ── */}
-      <div className={`w-full mb-2 flex ${!currentGroup ? 'justify-center' : 'justify-start'}`}>
-        <div className={`bg-white dark:bg-paper-100 p-1.5 rounded-xl border border-gray-200 dark:border-paper-300 shadow-sm flex flex-row items-center justify-between gap-2 transition-all hover:shadow-md ${!currentGroup ? 'w-auto' : 'w-full'}`}>
+      <div className={`w-full flex ${compact ? 'mb-0 justify-start' : `mb-2 ${!currentGroup ? 'justify-center' : 'justify-start'}`}`}>
+        <div className={`${compact ? 'w-full bg-transparent p-0' : `bg-white dark:bg-paper-100 p-1.5 rounded-xl border border-gray-200 dark:border-paper-300 shadow-sm hover:shadow-md ${!currentGroup ? 'w-auto' : 'w-full'}`} flex flex-row items-center justify-between gap-1.5 transition-all`}>
 
           {/* Group Selector & New Button */}
-          <div className="flex items-center gap-2 flex-1 lg:flex-none lg:w-auto bg-gray-50/80 dark:bg-paper-300/30 p-1.5 rounded-xl border border-gray-100/80 dark:border-paper-300/30 min-w-0">
-            <div className="relative flex-1 lg:min-w-[200px] min-w-0" ref={dropdownRef}>
+          <div className={`flex min-w-0 flex-1 items-center ${compact ? 'gap-1 bg-gray-50/90 dark:bg-paper-200/80 rounded-xl border border-gray-200/70 dark:border-paper-300/50 p-0.5' : 'gap-2 lg:flex-none lg:w-auto bg-gray-50/80 dark:bg-paper-300/30 p-1.5 rounded-xl border border-gray-100/80 dark:border-paper-300/30'}`}>
+            <div className={`relative min-w-0 flex-1 ${compact ? '' : 'lg:min-w-[200px]'}`} ref={dropdownRef}>
               <button
                 type="button"
                 onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                className={`w-full flex items-center justify-between pl-3 pr-2 py-2.5 text-sm rounded-lg focus:ring-2 focus:ring-black/5 dark:focus:ring-white/10 text-gray-900 dark:text-gray-100 font-semibold cursor-pointer outline-none transition-all duration-200 ${isDropdownOpen ? 'bg-white shadow-sm ring-1 ring-gray-200/50 dark:bg-paper-300' : 'bg-transparent hover:bg-white/80 dark:hover:bg-paper-300/80'}`}
+                className={`w-full flex items-center justify-between text-sm rounded-lg focus:ring-2 focus:ring-black/5 dark:focus:ring-white/10 text-gray-900 dark:text-gray-100 font-semibold cursor-pointer outline-none transition-all duration-200 ${compact ? 'pl-2 pr-1.5 py-1.5' : 'pl-3 pr-2 py-2.5'} ${isDropdownOpen ? 'bg-white shadow-sm ring-1 ring-gray-200/50 dark:bg-paper-300' : 'bg-transparent hover:bg-white/80 dark:hover:bg-paper-300/80'}`}
               >
                 <div className="flex items-center gap-2.5 truncate">
-                  <span className={`flex items-center justify-center w-6 h-6 rounded-md bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 flex-shrink-0 transition-colors ${isDropdownOpen ? 'opacity-100' : 'opacity-80'}`}>
+                  <span className={`flex items-center justify-center rounded-md bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 flex-shrink-0 transition-colors ${compact ? 'w-5 h-5 text-xs' : 'w-6 h-6'} ${isDropdownOpen ? 'opacity-100' : 'opacity-80'}`}>
                     {currentGroup ? '👥' : '👤'}
                   </span>
                   <span className="truncate">{currentGroup ? currentGroup.name : 'Personal Workspace'}</span>
@@ -469,16 +469,25 @@ export default function GroupManager({ user, currentGroup, onGroupChange, onClea
                       </button>
                     ))}
                   </div>
+                  {compact && (
+                    <button
+                      type="button"
+                      onClick={() => { setIsDropdownOpen(false); setShowCreate(true) }}
+                      className="w-full border-t border-gray-100 px-4 py-2.5 text-left text-sm font-semibold text-blue-600 hover:bg-blue-50 dark:border-paper-300 dark:text-blue-400 dark:hover:bg-blue-500/10"
+                    >
+                      + Create new group
+                    </button>
+                  )}
                 </div>
               )}
             </div>
 
-            <button
+            {!compact && <button
               onClick={() => setShowCreate(true)}
               className="px-4 py-2 text-xs bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-lg hover:bg-black dark:hover:bg-gray-100 hover:shadow-lg transition-all font-bold whitespace-nowrap active:scale-95 flex items-center gap-1.5"
             >
               <span className="text-base leading-none">+</span> New
-            </button>
+            </button>}
           </div>
 
           {/* Desktop Actions */}

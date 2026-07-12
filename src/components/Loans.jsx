@@ -151,11 +151,11 @@ const Loans = forwardRef(({ currentGroup, user }, ref) => {
   const netLoan = loanGiven - loanReceived
 
   return (
-    <div className="card p-4 bg-white dark:bg-paper-100 border-paper-200 dark:border-paper-300">
+    <div className="card p-6 border-0 shadow-none bg-transparent sm:bg-white dark:sm:bg-paper-100 sm:shadow-[0_8px_30px_rgb(0,0,0,0.04)] sm:border sm:border-paper-200/60 dark:sm:border-paper-300/50">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
         <div>
-          <h2 className="font-semibold text-xl tracking-tight text-ink-900"> Loan Management</h2>
-          <p className="text-gray-500 dark:text-gray-400 text-xs mt-0.5 sm:block hidden">Income and Expenses</p>
+          <h2 className="font-semibold text-xl tracking-tight text-ink-900">Loans</h2>
+          <p className="text-gray-500 dark:text-gray-400 text-xs mt-0.5 sm:block hidden">Track money lent and borrowed</p>
         </div>
         <div className="flex gap-2 w-full sm:w-auto">
           <DateRangePicker value={dateRange} onChange={setDateRange} className="flex-1 sm:w-48" />

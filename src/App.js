@@ -97,8 +97,8 @@ function App() {
 
       const displayName = getUserDisplayName()
 
-      for (const expense of newExpenses) {
-        const expenseData = {
+      const expenseData = newExpenses.map(expense => {
+        const row = {
           amount: expense.amount || 0,
           item: expense.item || 'item',
           category: expense.category || 'other',
@@ -110,14 +110,16 @@ function App() {
         }
 
         if (currentGroup) {
-          expenseData.group_id = currentGroup.id
+          row.group_id = currentGroup.id
         }
+        return row
+      })
 
-        const { error } = await supabase.from('expenses').insert(expenseData)
+      // One bulk request is faster and keeps a multi-entry save together.
+      const { error } = await supabase.from('expenses').insert(expenseData)
 
-        if (error) {
-          throw error
-        }
+      if (error) {
+        throw error
       }
 
       // Refresh all tables immediately
@@ -235,10 +237,15 @@ function App() {
         user={user}
         onLogout={() => setUser(null)}
         currentGroup={currentGroup}
+        onGroupChange={setCurrentGroup}
+        onClearChat={() => {
+          localStorage.removeItem('pfm_messages')
+          setChatKey(k => k + 1)
+        }}
       >
         {activeTab === 'chat' && (
           <div className="flex flex-col h-full relative">
-            <div className="flex-shrink-0 p-4 lg:p-8 lg:pt-8 max-w-7xl mx-auto w-full">
+            <div className="hidden lg:block flex-shrink-0 p-4 lg:p-8 lg:pt-8 max-w-7xl mx-auto w-full">
               <GroupManager
                 user={user}
                 currentGroup={currentGroup}
@@ -269,78 +276,59 @@ function App() {
 
         {activeTab === 'expenses' && (
           <div className="flex flex-col h-full relative">
-            <div className="flex-shrink-0 p-4 lg:p-8 lg:pt-8 max-w-[1600px] mx-auto w-full">
+            <div className="hidden lg:block flex-shrink-0 p-4 lg:p-8 lg:pt-8 max-w-[1600px] mx-auto w-full">
               <GroupManager user={user} currentGroup={currentGroup} onGroupChange={setCurrentGroup} />
             </div>
             <div className="flex-1 overflow-auto px-4 lg:px-8 pb-32 lg:pb-8 max-w-[1600px] mx-auto w-full">
               <Table ref={tableRef} expenses={expenses} currentGroup={currentGroup} user={user} />
             </div>
-            <button
-              onClick={() => setShowAddExpense(true)}
-              className="fixed bottom-24 lg:bottom-8 right-6 lg:right-12 w-14 h-14 lg:w-14 lg:h-14 bg-black text-white rounded-2xl shadow-xl shadow-black/20 hover:scale-105 active:scale-95 transition-all flex items-center justify-center z-40"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-            </button>
           </div>
         )}
 
         {activeTab === 'income' && (
           <div className="flex flex-col h-full relative">
-            <div className="flex-shrink-0 p-4 lg:p-8 lg:pt-8 max-w-[1600px] mx-auto w-full">
+            <div className="hidden lg:block flex-shrink-0 p-4 lg:p-8 lg:pt-8 max-w-[1600px] mx-auto w-full">
               <GroupManager user={user} currentGroup={currentGroup} onGroupChange={setCurrentGroup} />
             </div>
             <div className="flex-1 overflow-auto px-4 lg:px-8 pb-32 lg:pb-8 max-w-[1600px] mx-auto w-full">
               <Income ref={incomeRef} currentGroup={currentGroup} user={user} />
             </div>
-            <button
-              onClick={() => setShowAddExpense(true)}
-              className="fixed bottom-24 lg:bottom-8 right-6 lg:right-12 w-14 h-14 lg:w-14 lg:h-14 bg-black text-white rounded-2xl shadow-xl shadow-black/20 hover:scale-105 active:scale-95 transition-all flex items-center justify-center z-40"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-            </button>
           </div>
         )}
 
         {activeTab === 'loans' && (
           <div className="flex flex-col h-full relative">
-            <div className="flex-shrink-0 p-4 lg:p-8 lg:pt-8 max-w-[1600px] mx-auto w-full">
+            <div className="hidden lg:block flex-shrink-0 p-4 lg:p-8 lg:pt-8 max-w-[1600px] mx-auto w-full">
               <GroupManager user={user} currentGroup={currentGroup} onGroupChange={setCurrentGroup} />
             </div>
             <div className="flex-1 overflow-auto px-4 lg:px-8 pb-32 lg:pb-8 max-w-[1600px] mx-auto w-full">
               <Loans ref={loansRef} currentGroup={currentGroup} user={user} />
             </div>
-            <button
-              onClick={() => setShowAddExpense(true)}
-              className="fixed bottom-24 lg:bottom-8 right-6 lg:right-12 w-14 h-14 lg:w-14 lg:h-14 bg-black text-white rounded-2xl shadow-xl shadow-black/20 hover:scale-105 active:scale-95 transition-all flex items-center justify-center z-40"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-            </button>
           </div>
         )}
 
         {activeTab === 'analytics' && (
           <div className="flex flex-col h-full relative">
-            <div className="flex-shrink-0 p-4 lg:p-8 lg:pt-8 max-w-[1600px] mx-auto w-full">
+            <div className="hidden lg:block flex-shrink-0 p-4 lg:p-8 lg:pt-8 max-w-[1600px] mx-auto w-full">
               <GroupManager user={user} currentGroup={currentGroup} onGroupChange={setCurrentGroup} />
             </div>
             <div className="flex-1 overflow-auto px-4 lg:px-8 pb-32 lg:pb-8 max-w-[1600px] mx-auto w-full">
               <EnhancedAnalytics currentGroup={currentGroup} user={user} />
             </div>
-            <button
-              onClick={() => setShowAddExpense(true)}
-              className="fixed bottom-24 lg:bottom-8 right-6 lg:right-12 w-14 h-14 lg:w-14 lg:h-14 bg-black text-white rounded-2xl shadow-xl shadow-black/20 hover:scale-105 active:scale-95 transition-all flex items-center justify-center z-40"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-            </button>
           </div>
+        )}
+
+        {activeTab !== 'chat' && (
+          <button
+            type="button"
+            onClick={() => setShowAddExpense(true)}
+            aria-label="Add expense"
+            className="fixed bottom-8 right-12 z-40 hidden h-14 w-14 items-center justify-center rounded-2xl bg-black text-white shadow-xl shadow-black/20 transition-all hover:scale-105 active:scale-95 lg:flex"
+          >
+            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+          </button>
         )}
 
         {/* Add Modal */}

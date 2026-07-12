@@ -191,7 +191,11 @@
   }
 
   .bottom-nav {
-    @apply fixed bottom-0 left-0 right-0 bg-paper-50/95 dark:bg-paper-100/95 backdrop-blur-xl border-t border-paper-200/60 dark:border-paper-300/50 shadow-card-top lg:hidden pb-[env(safe-area-inset-bottom)];
+    @apply fixed z-40 rounded-2xl bg-white/95 dark:bg-paper-100/95 backdrop-blur-xl border border-paper-200/70 dark:border-paper-300/60 shadow-card-top lg:hidden;
+    left: 0.5rem;
+    right: 0.5rem;
+    bottom: 0;
+    padding-bottom: env(safe-area-inset-bottom);
   }
 
   /* Dark mode select and option styling */

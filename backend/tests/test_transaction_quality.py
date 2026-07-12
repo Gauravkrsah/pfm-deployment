@@ -21,6 +21,22 @@ class TransactionQualityTest(unittest.TestCase):
         self.assertEqual([], response['expenses'])
         self.assertIn('could not identify', response['reply'].lower())
 
+    def test_multiple_expense_reply_lists_saved_details(self):
+        expenses = [
+            {'item': 'Rice Curry', 'amount': 300, 'category': 'Food'},
+            {'item': 'Petrol', 'amount': 500, 'category': 'Transport'},
+            {'item': 'Fan', 'amount': 1000, 'category': 'Electronics'},
+        ]
+
+        reply = self.service._format_entry_reply(expenses, 'expense')
+
+        self.assertIn('Saved 3 expense entries:', reply)
+        self.assertIn('Rice Curry: Rs.300, Food', reply)
+        self.assertIn('Petrol: Rs.500, Transport', reply)
+        self.assertIn('Fan: Rs.1,000, Electronics', reply)
+        self.assertNotIn('–', reply)
+        self.assertNotIn('—', reply)
+
     def test_media_category_uses_item_evidence_over_bad_model_guess(self):
         transactions = self.service._normalise_media_transactions([{
             'amount': 300,

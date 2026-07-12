@@ -399,6 +399,11 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
   const [voiceSessionText, setVoiceSessionText] = useState('')
   const [voiceAutoSubmit, setVoiceAutoSubmit] = useState(false)
   const messagesEndRef = useRef(null)
+  const inputRef = useRef(null)
+  const keyboardCheckTimerRef = useRef(null)
+  const largestViewportHeightRef = useRef(
+    typeof window !== 'undefined' ? (window.visualViewport?.height || window.innerHeight) : 0
+  )
   const messagesRef = useRef(messages)
   const tabRefs = useRef({})
   const imageInputRef = useRef(null)
@@ -450,6 +455,44 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
 
   const [inputMode, setInputMode] = useState(getSavedInputMode)
   const [autoIntentEnabled, setAutoIntentEnabled] = useState(getSavedAutoIntent)
+  const [isComposerFocused, setIsComposerFocused] = useState(false)
+
+  const updateComposerFocus = useCallback((focused) => {
+    setIsComposerFocused(focused)
+    window.dispatchEvent(new CustomEvent('pfm:composer-focus', { detail: { focused } }))
+  }, [])
+
+  useEffect(() => () => {
+    window.dispatchEvent(new CustomEvent('pfm:composer-focus', { detail: { focused: false } }))
+  }, [updateComposerFocus])
+
+  useEffect(() => {
+    const viewport = window.visualViewport
+    if (!viewport) return undefined
+
+    const syncKeyboardState = () => {
+      window.clearTimeout(keyboardCheckTimerRef.current)
+      keyboardCheckTimerRef.current = window.setTimeout(() => {
+        const viewportHeight = viewport.height
+        largestViewportHeightRef.current = Math.max(largestViewportHeightRef.current, viewportHeight)
+        const keyboardIsOpen = largestViewportHeightRef.current - viewportHeight > 120
+
+        if (!keyboardIsOpen && document.activeElement === inputRef.current) {
+          inputRef.current?.blur()
+        }
+        updateComposerFocus(keyboardIsOpen)
+      }, 100)
+    }
+
+    viewport.addEventListener('resize', syncKeyboardState)
+    window.addEventListener('orientationchange', syncKeyboardState)
+
+    return () => {
+      window.clearTimeout(keyboardCheckTimerRef.current)
+      viewport.removeEventListener('resize', syncKeyboardState)
+      window.removeEventListener('orientationchange', syncKeyboardState)
+    }
+  }, [updateComposerFocus])
 
   useEffect(() => {
     localStorage.setItem(INPUT_MODE_STORAGE_KEY, inputMode)
@@ -500,6 +543,7 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
   }
 
   const currentModeConfig = INPUT_MODES.find(m => m.id === inputMode) || INPUT_MODES[0]
+  const CurrentModeIcon = currentModeConfig.icon
   const currentStyle = MODE_STYLES[inputMode] || MODE_STYLES.chat
 
   const scrollToBottom = () => {
@@ -1146,7 +1190,7 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
     if (submissionOverride?.voice && !submittedAttachment && /^[\d\s,.-]+$/.test(userMsg)) {
       setMessages(prev => [...prev, {
         type: 'bot',
-        text: `What does ${userMsg} refer to—an expense, income, or loan?`,
+        text: `What does ${userMsg} refer to: an expense, income, or loan?`,
       }])
       finishProcessing()
       return
@@ -1190,8 +1234,8 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
 
       if (!hasNumber || !hasRealWord) {
         const hint = !hasNumber
-          ? `Include an amount — ${resolvedModeConfig.hint}`
-          : `Use a real description — ${resolvedModeConfig.hint}`
+          ? `Include an amount. ${resolvedModeConfig.hint}`
+          : `Use a real description. ${resolvedModeConfig.hint}`
         setMessages(prev => [...prev, { type: 'bot', text: hint }])
         finishProcessing()
         return
@@ -1776,8 +1820,8 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
       {showMessagesArea && (
         <>
           {messages.length === 0 ? (
-            <div className="flex-1 flex items-center justify-center px-4 lg:px-8 antialiased pb-28 sm:pb-36 lg:pb-40">
-              <div className="text-center px-2 max-w-sm mx-auto">
+            <div className={`flex-1 flex items-center justify-center px-4 lg:px-8 antialiased lg:pb-40 ${isComposerFocused ? 'pb-20' : 'pb-28 sm:pb-36'}`}>
+              <div className={`text-center px-2 max-w-sm mx-auto transition-opacity ${isComposerFocused ? 'opacity-0 pointer-events-none lg:opacity-100' : 'opacity-100'}`}>
                 <div className="inline-flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 rounded-[2rem] bg-gray-50 dark:bg-paper-200 shadow-sm border border-gray-100 dark:border-paper-300 text-4xl sm:text-5xl mb-4 sm:mb-5">
                   {currentModeConfig.emoji}
                 </div>
@@ -1847,73 +1891,75 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
       )}
 
       {/* ─── Premium Input Area ─── */}
-      <div className="fixed bottom-14 lg:bottom-0 left-0 right-0 lg:left-64 z-30" style={{ transform: 'translateZ(0)' }}>
+      <div className={`fixed lg:bottom-0 left-0 right-0 lg:left-64 z-30 ${isComposerFocused ? 'bottom-0' : 'bottom-20'}`} style={{ transform: 'translateZ(0)' }}>
         <div className="absolute inset-x-0 bottom-full h-16 sm:h-24 bg-gradient-to-t from-paper-50 dark:from-paper-50 to-transparent pointer-events-none" />
         <div className="bg-paper-50/95 dark:bg-paper-50/95 backdrop-blur-md px-3 sm:px-6 lg:px-8 pb-3 lg:pb-6 pt-2">
           <div className="max-w-3xl mx-auto relative" style={{ zIndex: 1 }}>
 
-            {/* ── MOBILE: Simple Segmented Control ── */}
-            <div className="flex lg:hidden items-center gap-2 mb-3">
-              {/* Scrollable pill row */}
-              <div className="flex-1 overflow-x-auto scrollbar-hide">
-                <div className="flex items-center bg-gray-100 dark:bg-paper-200/80 rounded-2xl p-1 border border-gray-200/50 dark:border-paper-300/30 w-full relative">
-                  {/* Sliding pill indicator */}
-                  <div
-                    className="absolute top-1 bottom-1 rounded-xl bg-white dark:bg-paper-300 shadow-sm border border-gray-200/50 dark:border-white/5 pointer-events-none z-0"
-                    style={{
-                      left: indicatorStyle.left + 4,
-                      width: indicatorStyle.width,
-                      transition: 'all 0.3s cubic-bezier(0.4,0,0.2,1)',
-                    }}
-                  />
+            {/* ── MOBILE: Mode and composer controls ── */}
+            {isComposerFocused ? (
+              <div className="mb-2 flex items-center px-1 lg:hidden">
+                <div className={`inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[11px] font-bold shadow-sm ${autoIntentEnabled
+                  ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300'
+                  : 'border-gray-200 bg-white text-gray-700 dark:border-paper-300 dark:bg-paper-200 dark:text-gray-200'
+                }`}>
+                  {autoIntentEnabled ? <span className="h-2 w-2 rounded-full bg-blue-500" /> : <CurrentModeIcon size={13} />}
+                  {autoIntentEnabled ? 'Intent on' : `${currentModeConfig.label} mode`}
+                </div>
+              </div>
+            ) : (
+            <div className="lg:hidden mb-2.5 rounded-2xl border border-gray-200/70 dark:border-paper-300/50 bg-white/90 dark:bg-paper-100/95 p-1.5 shadow-[0_4px_18px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_18px_rgba(0,0,0,0.22)]">
+              <div className="grid grid-cols-4 gap-1 rounded-xl bg-gray-100/90 p-1 dark:bg-paper-200/80" aria-label="Transaction type">
                   {INPUT_MODES.map(mode => {
                     const Icon = mode.icon
                     const isActive = inputMode === mode.id
                     return (
                       <button
                         key={mode.id}
-                        ref={el => tabRefs.current[mode.id] = el}
                         onClick={() => setInputMode(mode.id)}
-                        className={`relative z-10 flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-[11.5px] font-bold whitespace-nowrap transition-all duration-200 ${isActive
-                          ? inputMode === 'chat' ? 'text-gray-900 dark:text-white'
-                            : inputMode === 'expense' ? 'text-red-700 dark:text-red-400'
-                              : inputMode === 'income' ? 'text-emerald-800 dark:text-emerald-400'
-                                : 'text-amber-800 dark:text-amber-400'
-                          : 'text-gray-500 dark:text-gray-400'
+                        aria-pressed={isActive}
+                        className={`min-w-0 flex h-11 items-center justify-center gap-1 rounded-lg px-1 text-[10px] font-bold transition-all duration-200 active:scale-[0.97] ${isActive
+                          ? inputMode === 'chat' ? 'bg-white text-gray-900 shadow-sm ring-1 ring-black/5 dark:bg-paper-300 dark:text-white dark:ring-white/5'
+                            : inputMode === 'expense' ? 'bg-white text-red-700 shadow-sm ring-1 ring-black/5 dark:bg-paper-300 dark:text-red-400 dark:ring-white/5'
+                              : inputMode === 'income' ? 'bg-white text-emerald-700 shadow-sm ring-1 ring-black/5 dark:bg-paper-300 dark:text-emerald-400 dark:ring-white/5'
+                                : 'bg-white text-amber-700 shadow-sm ring-1 ring-black/5 dark:bg-paper-300 dark:text-amber-400 dark:ring-white/5'
+                          : 'text-gray-500 hover:bg-white/60 dark:text-gray-400 dark:hover:bg-paper-300/60'
                           }`}
                       >
-                        <Icon className="w-3.5 h-3.5 flex-shrink-0" strokeWidth={isActive ? 2.5 : 2} />
-                        <span>{mode.label}</span>
+                        <Icon className="h-3.5 w-3.5 flex-shrink-0" strokeWidth={isActive ? 2.5 : 2} />
+                        <span className="truncate">{mode.label}</span>
                       </button>
                     )
                   })}
-                </div>
               </div>
-              {/* Intent detection */}
-              <button
-                type="button"
-                onClick={() => setAutoIntentEnabled(enabled => !enabled)}
-                role="switch"
-                aria-checked={autoIntentEnabled}
-                aria-label={`Intent detection ${autoIntentEnabled ? 'on' : 'off'}`}
-                title={`Intent detection is ${autoIntentEnabled ? 'on' : 'off'}`}
-                className="flex-shrink-0 h-9 px-2 rounded-xl flex items-center gap-2 text-[11px] font-semibold text-gray-600 dark:text-gray-300 hover:bg-black/[0.04] dark:hover:bg-white/[0.05] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 active:scale-95 transition-all"
-              >
-                <span className="hidden xs:inline">Intent</span>
-                <span className={`relative block w-8 h-[18px] rounded-full transition-colors duration-200 ${autoIntentEnabled ? 'bg-blue-600 dark:bg-blue-500' : 'bg-gray-300 dark:bg-paper-400'}`}>
-                  <span className={`absolute left-0.5 top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow-sm transition-transform duration-200 ${autoIntentEnabled ? 'translate-x-3.5' : 'translate-x-0'}`} />
-                </span>
-              </button>
-              {/* Delete button */}
-              <button
-                type="button"
-                onClick={() => setShowDeleteConfirm(true)}
-                className="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-gray-400 dark:text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 active:scale-90 transition-all duration-150 border border-gray-200/50 dark:border-paper-300/30 bg-gray-100 dark:bg-paper-200/80"
-                title="Delete Chat"
-              >
-                <Trash2 size={15} strokeWidth={2} />
-              </button>
+
+              <div className="mt-1.5 flex items-center justify-between border-t border-gray-200/70 px-1.5 pt-1.5 dark:border-paper-300/50">
+                <button
+                  type="button"
+                  onClick={() => setAutoIntentEnabled(enabled => !enabled)}
+                  role="switch"
+                  aria-checked={autoIntentEnabled}
+                  className="flex min-h-8 items-center gap-2 rounded-lg px-1.5 text-[11px] font-semibold text-gray-600 transition-colors hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-paper-200"
+                >
+                  <span className={`relative block h-[18px] w-8 rounded-full transition-colors duration-200 ${autoIntentEnabled ? 'bg-blue-600 dark:bg-blue-500' : 'bg-gray-300 dark:bg-paper-400'}`}>
+                    <span className={`absolute left-0.5 top-0.5 h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform duration-200 ${autoIntentEnabled ? 'translate-x-3.5' : 'translate-x-0'}`} />
+                  </span>
+                  <span>Intent</span>
+                  <span className={autoIntentEnabled ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400'}>{autoIntentEnabled ? 'On' : 'Off'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="flex min-h-8 items-center gap-1.5 rounded-lg px-2 text-[11px] font-semibold text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 active:scale-95 dark:text-gray-500 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+                  title="Clear conversation"
+                >
+                  <Trash2 size={14} strokeWidth={2} />
+                  <span>Clear</span>
+                </button>
+              </div>
             </div>
+            )}
 
             {/* ── DESKTOP: Full Tab Bar ── */}
             <div className="hidden lg:flex justify-center mb-4 w-full">
@@ -2080,12 +2126,18 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
                 </div>
 
                 <input
+                  ref={inputRef}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
+                  onFocus={() => updateComposerFocus(true)}
+                  onBlur={() => {
+                    window.setTimeout(() => {
+                      if (document.activeElement !== inputRef.current) updateComposerFocus(false)
+                    }, 100)
+                  }}
                   placeholder={isRecording ? 'Listening…' : currentModeConfig.placeholder}
                   className="flex-1 bg-transparent text-[15px] sm:text-[16px] leading-relaxed text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none min-w-0"
                   disabled={isRecording}
-                  autoFocus
                 />
 
                 {isRecording && (

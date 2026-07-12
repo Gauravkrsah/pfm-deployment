@@ -46,10 +46,18 @@ class BudgetOptimizerRequest(BaseModel):
 nlp_service = NLPService()
 expense_analyzer = ExpenseAnalyzer()
 
+
+def humanize_agent_reply(result):
+    """Keep assistant punctuation simple and conversational in every text response."""
+    if isinstance(result, dict) and isinstance(result.get("reply"), str):
+        result["reply"] = result["reply"].replace("–", "-").replace("—", "-")
+    return result
+
+
 @router.post("/parse")
 async def parse_expense(request: ParseRequest):
     """Parse expense text and return structured expense data"""
-    return await nlp_service.parse_expense(request.text, request.mode)
+    return humanize_agent_reply(await nlp_service.parse_expense(request.text, request.mode))
 
 @router.post("/intent")
 async def classify_intent(request: IntentRequest):
@@ -60,12 +68,12 @@ async def classify_intent(request: IntentRequest):
 async def understand_media(request: MediaUnderstandRequest):
     """Convert supported image/audio input into text for the existing app flows."""
     try:
-        return await nlp_service.understand_media(
+        return humanize_agent_reply(await nlp_service.understand_media(
             request.media_type,
             request.mime_type,
             request.data,
             request.prompt,
-        )
+        ))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
@@ -92,10 +100,11 @@ async def chat_about_expenses(request: ChatRequest):
     print(f"[API] Chat request: {request.text}")
     print(f"[API] Expenses data count: {len(request.expenses_data)}")
     result = await nlp_service.chat_about_expenses(request)
+    result = humanize_agent_reply(result)
     print(f"[API] Response: {result.get('reply', '')[:100]}...")
     return result
 
 @router.post("/budget-optimizer/explain")
 async def explain_budget_optimizer(request: BudgetOptimizerRequest):
     """Generate a grounded explanation for greedy budget optimization results"""
-    return await nlp_service.explain_budget_optimizer(request)
+    return humanize_agent_reply(await nlp_service.explain_budget_optimizer(request))

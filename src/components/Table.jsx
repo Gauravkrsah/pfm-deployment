@@ -190,6 +190,34 @@ const Table = forwardRef(({ expenses, onExpenseUpdate, currentGroup, user }, ref
     return acc
   }, [])]
 
+  const hasActiveFilters = Boolean(searchTerm.trim())
+    || categoryFilter !== 'all'
+    || dateRange.type !== 'all'
+
+  const clearFilters = () => {
+    setSearchTerm('')
+    setCategoryFilter('all')
+    setDateRange({ type: 'all', start: null, end: null })
+  }
+
+  const emptyState = (
+    <div className="flex flex-col items-center justify-center gap-3 py-2">
+      <span>No expenses found.</span>
+      {hasActiveFilters && (
+        <button
+          type="button"
+          onClick={clearFilters}
+          className="inline-flex items-center gap-2 rounded-lg border border-gray-300 dark:border-paper-400 bg-white dark:bg-paper-200 px-3.5 py-2 text-xs font-semibold text-gray-700 dark:text-gray-100 shadow-sm transition-colors hover:bg-gray-50 dark:hover:bg-paper-300 focus:outline-none focus:ring-2 focus:ring-black/10 dark:focus:ring-white/20"
+        >
+          <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12a9 9 0 101.7-5.3M3 4v5h5" />
+          </svg>
+          Clear filters
+        </button>
+      )}
+    </div>
+  )
+
   return (
     <div className="card p-6 border-0 shadow-none bg-transparent sm:bg-white dark:sm:bg-paper-100 sm:shadow-[0_8px_30px_rgb(0,0,0,0.04)] sm:border sm:border-paper-200/60 dark:sm:border-paper-300/50">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
@@ -295,7 +323,7 @@ const Table = forwardRef(({ expenses, onExpenseUpdate, currentGroup, user }, ref
               </tr>
             ) : filteredData.length === 0 ? (
               <tr>
-                <td colSpan="7" className="p-8 text-center text-gray-500">No expenses found.</td>
+                <td colSpan="7" className="p-8 text-center text-gray-500">{emptyState}</td>
               </tr>
             ) : (
               filteredData.map((expense) => {
@@ -351,7 +379,7 @@ const Table = forwardRef(({ expenses, onExpenseUpdate, currentGroup, user }, ref
         {loading ? (
           <div className="p-8 text-center text-gray-500">Loading expenses...</div>
         ) : filteredData.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">No expenses found.</div>
+          <div className="p-8 text-center text-gray-500">{emptyState}</div>
         ) : (
           filteredData.map((expense) => {
             const displayRemarks = getDisplayRemarks(expense)

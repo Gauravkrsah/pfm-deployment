@@ -2034,15 +2034,20 @@ Rules:
             person = expense.get("paid_by") or "the other person"
             return f"I found a loan entry of Rs.{abs(expense['amount']):,.0f} involving {person}. Please confirm the direction."
         if len(expenses) > 1:
-            return f"Done — saved {len(expenses)} {mode} entries with clean categories and remarks."
+            entry_label = "expense" if mode == "expense" else mode
+            details = "\n".join(
+                f"- {expense.get('item', 'Item')}: {self._money_for_reply(abs(expense.get('amount', 0)))}, {expense.get('category', 'Other')}"
+                for expense in expenses
+            )
+            return f"Saved {len(expenses)} {entry_label} entries:\n{details}"
 
         expense = expenses[0]
         amount = abs(expense["amount"])
         if mode == "income":
-            return f"Done — saved Rs.{amount:,.0f} income from {expense['item']}."
+            return f"Saved Rs.{amount:,.0f} income from {expense['item']}."
         if mode == "loan":
-            return f"Done — saved Rs.{amount:,.0f} loan transaction: {expense['remarks']}."
-        return f"Done — saved Rs.{amount:,.0f} for {expense['item']} under {expense['category']}."
+            return f"Saved Rs.{amount:,.0f} loan transaction: {expense['remarks']}."
+        return f"Saved {expense['item']}: Rs.{amount:,.0f}, {expense['category']}."
 
     async def _ai_enhanced_parse(self, text: str, mode: str = "expense"):
         """Use a low-latency NIM model to understand and categorize a new entry."""

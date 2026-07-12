@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 const padDatePart = (value) => String(value).padStart(2, '0')
 
@@ -95,6 +96,7 @@ export default function DateRangePicker({ value, onChange, className = '' }) {
     const [customEnd, setCustomEnd] = useState('')
     const [visibleMonth, setVisibleMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1))
     const dropdownRef = useRef(null)
+    const calendarRef = useRef(null)
 
     const syncDraftWithValue = () => {
         const startKey = value?.customStart || valueToDateKey(value?.start)
@@ -115,7 +117,11 @@ export default function DateRangePicker({ value, onChange, className = '' }) {
 
     useEffect(() => {
         const handleClickOutside = (event) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+            if (
+                dropdownRef.current
+                && !dropdownRef.current.contains(event.target)
+                && !calendarRef.current?.contains(event.target)
+            ) {
                 setIsOpen(false)
                 setShowCalendar(false)
             }
@@ -135,6 +141,16 @@ export default function DateRangePicker({ value, onChange, className = '' }) {
             document.removeEventListener('keydown', handleEscape)
         }
     }, [])
+
+    useEffect(() => {
+        if (!showCalendar) return undefined
+
+        const previousOverflow = document.body.style.overflow
+        document.body.style.overflow = 'hidden'
+        return () => {
+            document.body.style.overflow = previousOverflow
+        }
+    }, [showCalendar])
 
     const calendarDays = useMemo(() => getCalendarDays(visibleMonth), [visibleMonth])
     const todayKey = toDateKey(new Date())
@@ -246,11 +262,18 @@ export default function DateRangePicker({ value, onChange, className = '' }) {
                 </svg>
             </button>
 
-            {isOpen && (
+            {isOpen && (() => {
+                const panel = (
                 <div
+                    ref={showCalendar ? calendarRef : undefined}
                     role="dialog"
+                    aria-modal={showCalendar || undefined}
                     aria-label={showCalendar ? 'Choose a custom date range' : 'Choose a date range'}
-                    className={`absolute left-0 sm:left-auto sm:right-0 top-full mt-2 bg-white dark:bg-paper-200 rounded-xl shadow-xl border border-gray-100 dark:border-paper-300 z-50 overflow-hidden animate-fade-in ${showCalendar ? 'w-[calc(100vw-3rem)] max-w-[22rem]' : 'w-64'}`}
+                    className={`bg-white dark:bg-paper-200 rounded-xl shadow-xl border border-gray-100 dark:border-paper-300 z-50 overflow-x-hidden animate-fade-in ${
+                        showCalendar
+                            ? 'relative w-full max-w-[22rem] max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain'
+                            : 'absolute right-0 top-full mt-2 w-64 max-w-[calc(100vw-1.5rem)] overflow-hidden'
+                    }`}
                 >
                     {!showCalendar ? (
                         <div className="py-1">
@@ -283,7 +306,7 @@ export default function DateRangePicker({ value, onChange, className = '' }) {
                             </button>
                         </div>
                     ) : (
-                        <div className="p-3">
+                        <div className="p-2.5 sm:p-3">
                             <div className="flex items-center justify-between mb-3">
                                 <button
                                     type="button"
@@ -350,7 +373,7 @@ export default function DateRangePicker({ value, onChange, className = '' }) {
                                 ))}
                             </div>
 
-                            <div className="grid grid-cols-7 gap-y-1" role="grid">
+                            <div className="grid grid-cols-7 gap-y-0.5 sm:gap-y-1" role="grid">
                                 {calendarDays.map(date => {
                                     const dateKey = toDateKey(date)
                                     const isCurrentMonth = date.getMonth() === visibleMonth.getMonth()
@@ -370,7 +393,7 @@ export default function DateRangePicker({ value, onChange, className = '' }) {
                                             disabled={isFuture}
                                             aria-label={date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
                                             aria-selected={Boolean(isSelected)}
-                                            className={`h-9 relative flex items-center justify-center text-xs transition-colors focus:outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/30 ${
+                                            className={`h-8 sm:h-9 relative flex items-center justify-center text-xs transition-colors focus:outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/30 ${
                                                 isFuture
                                                     ? 'text-gray-200 dark:text-gray-600 cursor-not-allowed'
                                                     : isSelected
@@ -400,7 +423,25 @@ export default function DateRangePicker({ value, onChange, className = '' }) {
                         </div>
                     )}
                 </div>
-            )}
+                )
+
+                if (!showCalendar) return panel
+
+                return createPortal(
+                    <div
+                        className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4 backdrop-blur-[2px]"
+                        onMouseDown={(event) => {
+                            if (event.target === event.currentTarget) {
+                                setIsOpen(false)
+                                setShowCalendar(false)
+                            }
+                        }}
+                    >
+                        {panel}
+                    </div>,
+                    document.body
+                )
+            })()}
         </div>
     )
 }
