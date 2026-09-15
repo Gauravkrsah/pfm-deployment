@@ -206,6 +206,7 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
     name: cat,
     value: stats.categories[cat]
   })).sort((a,b) => b.value - a.value);
+  const largestCategory = pieData[0] || null
 
   const summaryData = [
     { name: 'Income', value: stats.income, fill: '#22c55e' },
@@ -699,7 +700,8 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
         </div>
         
         <div className="flex-1 flex flex-col lg:flex-row items-start gap-8 bg-gray-50/30 dark:bg-paper-200/10 rounded-xl p-4 border border-gray-100/50 dark:border-paper-300/30">
-           <div className="w-full lg:w-2/5 h-[320px]">
+           <div className="w-full lg:w-2/5 flex-shrink-0">
+             <div className="relative h-[300px]">
              {pieData.length > 0 ? (
                <ResponsiveContainer width="100%" height="100%">
                  <PieChart>
@@ -727,20 +729,43 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
              ) : (
                <div className="h-full flex items-center justify-center text-gray-400 text-sm">No expenses found.</div>
              )}
+             {pieData.length > 0 && (
+               <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-center">
+                 <div>
+                   <div className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Total spent</div>
+                   <div className="mt-1 text-xl font-extrabold text-gray-900 dark:text-gray-100">{formatRs(stats.expense)}</div>
+                 </div>
+               </div>
+             )}
+             </div>
+             {largestCategory && (
+               <div className="mt-4 grid grid-cols-2 gap-3">
+                 <div className="rounded-xl border border-orange-100 bg-orange-50/70 p-3 dark:border-orange-900/40 dark:bg-orange-900/10">
+                   <div className="text-[10px] font-bold uppercase tracking-wide text-orange-700 dark:text-orange-300">Largest area</div>
+                   <div className="mt-1 truncate text-sm font-bold text-gray-800 dark:text-gray-100">{formatCategory(largestCategory.name)}</div>
+                   <div className="mt-0.5 text-xs text-orange-700 dark:text-orange-300">{formatRs(largestCategory.value)} · {Math.round((largestCategory.value / stats.expense) * 100)}%</div>
+                 </div>
+                 <div className="rounded-xl border border-gray-200 bg-white p-3 dark:border-paper-300 dark:bg-paper-200">
+                   <div className="text-[10px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">Categories</div>
+                   <div className="mt-1 text-lg font-extrabold text-gray-800 dark:text-gray-100">{pieData.length}</div>
+                   <div className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">tracked this period</div>
+                 </div>
+               </div>
+             )}
            </div>
            
-           <div className="w-full lg:w-3/5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+           <div className="w-full min-w-0 lg:w-3/5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
              {pieData.map((item, i) => {
                const percentage = Math.round((item.value / stats.expense) * 100);
                return (
-                 <div key={item.name} className="flex items-center justify-between p-4 bg-white dark:bg-paper-200 rounded-xl border border-gray-100 dark:border-paper-300 shadow-sm hover:shadow-md transition-shadow group cursor-default">
-                   <div className="flex items-center gap-3">
-                     <div className="w-4 h-4 rounded-full shadow-sm" style={{backgroundColor: pieColors[i % pieColors.length]}}></div>
-                     <span className="text-base font-semibold capitalize text-gray-700 dark:text-gray-200 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">{item.name}</span>
+                 <div key={item.name} className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-gray-100 bg-white p-3.5 shadow-sm transition-shadow group cursor-default hover:shadow-md dark:border-paper-300 dark:bg-paper-200">
+                   <div className="flex min-w-0 items-center gap-2.5">
+                     <div className="h-3.5 w-3.5 flex-shrink-0 rounded-full shadow-sm" style={{backgroundColor: pieColors[i % pieColors.length]}}></div>
+                     <span className="truncate text-sm font-semibold capitalize text-gray-700 transition-colors group-hover:text-gray-900 dark:text-gray-200 dark:group-hover:text-white">{item.name}</span>
                    </div>
                    <div className="flex flex-col items-end">
-                     <span className="text-base font-bold text-gray-900 dark:text-white">Rs.{item.value.toLocaleString()}</span>
-                     <span className="text-xs font-medium text-gray-500 bg-gray-100 dark:bg-paper-300 px-2 py-0.5 rounded-full mt-1">{percentage}%</span>
+                     <span className="text-sm font-bold text-gray-900 dark:text-white">{formatRs(item.value)}</span>
+                     <span className="mt-1 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500 dark:bg-paper-300">{percentage}%</span>
                    </div>
                  </div>
                );
