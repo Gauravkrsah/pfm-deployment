@@ -30,6 +30,9 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
   const [range, setRange] = useState({ type: 'all', start: null, end: null })
   const [loading, setLoading] = useState(true)
   const [savingsGoal, setSavingsGoal] = useState(20)
+  // null means "use the optimizer's practical defaults". Once the user edits
+  // the selection, an array (including []) represents their exact choices.
+  const [selectedBudgetCategories, setSelectedBudgetCategories] = useState(null)
   const [isGoalMenuOpen, setIsGoalMenuOpen] = useState(false)
   const goalMenuRef = useRef(null)
 
@@ -94,18 +97,16 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
       const highestDay = dailyData.length > 0 ? Math.max(...dailyData.map(d => d.amount)) : 0;
       
       const trends = { movingAverageData, avgDailySpend, highestDay };
-      const optimization = optimizeBudget(categories, expenseTotal, savingsGoal / 100);
-
       setAlgorithms({
         trends,
-        optimization
+        optimization: null
       });
     } else {
       setStats({ expense: 0, income: 0, balance: 0, loanOut: 0, loanIn: 0, categories: {}, dailyData: [] })
       setAlgorithms({ trends: null, optimization: null })
     }
     setLoading(false)
-  }, [user, currentGroup, range, savingsGoal])
+  }, [user, currentGroup, range])
 
   useEffect(() => { fetch() }, [fetch])
 
@@ -120,30 +121,37 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+  useEffect(() => {
+    // A personal and group view can have very different spending categories;
+    // start each scope with the safe defaults rather than carrying choices
+    // across to another user's data set.
+    setSelectedBudgetCategories(null)
+  }, [user?.id, currentGroup?.id])
+
   const savingsRate = stats.income > 0 ? Math.round((stats.balance / stats.income) * 100) : 0
 
+  const optimizerResult = useMemo(() => {
+    if (!stats.expense || !Object.keys(stats.categories).length) return null
+    return optimizeBudget(stats.categories, stats.expense, savingsGoal / 100, selectedBudgetCategories)
+  }, [stats.categories, stats.expense, savingsGoal, selectedBudgetCategories])
+
   const optimizerData = useMemo(() => {
-    if (!algorithms.optimization || !stats.categories) return [];
-    const cutsMap = {};
-    algorithms.optimization.suggestions.forEach(c => cutsMap[c.category] = c.cutAmount);
-    
-    return Object.keys(stats.categories).map(cat => {
-       const current = Number(stats.categories[cat]) || 0;
-       const cut = Number(cutsMap[cat]) || 0;
-       return {
-          category: cat,
-          current,
-          afterPlan: Math.max(0, current - cut),
-          cutAmount: cut,
-       };
-    }).sort((a,b) => b.current - a.current);
-  }, [algorithms.optimization, stats.categories]);
+    if (!optimizerResult) return []
+    return optimizerResult.categoryPlans
+      .map(plan => ({
+        category: plan.category,
+        current: plan.amount,
+        afterPlan: Math.max(0, plan.amount - plan.cutAmount),
+        cutAmount: plan.cutAmount,
+      }))
+      .sort((a, b) => b.current - a.current)
+  }, [optimizerResult])
 
   const optimizerPlan = useMemo(() => {
-    if (!algorithms.optimization || stats.expense <= 0) return null
+    if (!optimizerResult) return null
 
-    const target = Number(algorithms.optimization.targetSavings) || 0
-    const achieved = Number(algorithms.optimization.achievedCuts) || 0
+    const target = Number(optimizerResult.targetSavings) || 0
+    const achieved = Number(optimizerResult.achievedCuts) || 0
     const remaining = Math.max(0, target - achieved)
     const progress = target > 0 ? Math.min(100, Math.round((achieved / target) * 100)) : 0
 
@@ -153,10 +161,24 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
       remaining,
       progress,
       afterPlan: Math.max(0, stats.expense - achieved),
-      suggestions: algorithms.optimization.suggestions || [],
+      availableSavings: Number(optimizerResult.availableSavings) || 0,
+      selectedCategories: optimizerResult.selectedCategories || [],
+      suggestions: optimizerResult.suggestions || [],
       targetMet: remaining === 0,
     }
-  }, [algorithms.optimization, stats.expense])
+  }, [optimizerResult, stats.expense])
+
+  const toggleBudgetCategory = (category) => {
+    const defaultSelection = optimizerResult?.selectedCategories || []
+    setSelectedBudgetCategories(currentSelection => {
+      const nextSelection = currentSelection === null ? defaultSelection : currentSelection
+      const normalizedCategory = String(category).trim().toLowerCase()
+      const hasCategory = nextSelection.some(item => String(item).trim().toLowerCase() === normalizedCategory)
+      return hasCategory
+        ? nextSelection.filter(item => String(item).trim().toLowerCase() !== normalizedCategory)
+        : [...nextSelection, category]
+    })
+  }
 
   const pieColors = ['#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16', '#22c55e', '#06b6d4', '#3b82f6'];
   const pieData = Object.keys(stats.categories).map(cat => ({
@@ -431,6 +453,57 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
 
             {optimizerPlan ? (
               <>
+                <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-4 dark:border-emerald-900/50 dark:bg-emerald-900/10">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h5 className="text-sm font-bold text-gray-800 dark:text-gray-100">Which categories can you reduce?</h5>
+                      <p className="mt-1 text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">Select only areas you can realistically change. We started with flexible categories and left essentials off.</p>
+                    </div>
+                    {selectedBudgetCategories !== null && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedBudgetCategories(null)}
+                        className="flex-shrink-0 text-[10px] font-bold text-emerald-700 hover:text-emerald-900 dark:text-emerald-300 dark:hover:text-emerald-100"
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
+                  <div className="mt-3 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                    {optimizerResult.categoryPlans.map(plan => {
+                      const selected = optimizerPlan.selectedCategories.some(category => String(category).toLowerCase() === String(plan.category).toLowerCase())
+                      return (
+                        <button
+                          key={plan.category}
+                          type="button"
+                          onClick={() => toggleBudgetCategory(plan.category)}
+                          aria-pressed={selected}
+                          className={`flex min-w-0 items-center justify-between gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors ${selected
+                            ? 'border-emerald-300 bg-white text-emerald-900 shadow-sm dark:border-emerald-700 dark:bg-paper-200 dark:text-emerald-100'
+                            : 'border-transparent bg-white/60 text-gray-500 hover:border-gray-200 hover:bg-white dark:bg-paper-200/40 dark:text-gray-400 dark:hover:border-paper-300 dark:hover:bg-paper-200'
+                          }`}
+                        >
+                          <span className="flex min-w-0 items-center gap-2">
+                            <span className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border ${selected
+                              ? 'border-emerald-500 bg-emerald-500 text-white'
+                              : 'border-gray-300 bg-white dark:border-paper-400 dark:bg-paper-300'
+                            }`}>
+                              {selected && <CheckCircle2 size={12} />}
+                            </span>
+                            <span className="truncate text-xs font-semibold">{formatCategory(plan.category)}</span>
+                          </span>
+                          <span className="flex-shrink-0 text-[10px] text-gray-400 dark:text-gray-500">up to {Math.round(plan.maxCutRate * 100)}%</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <p className="mt-2 text-[10px] text-gray-500 dark:text-gray-400">
+                    {optimizerPlan.selectedCategories.length > 0
+                      ? `${optimizerPlan.selectedCategories.length} selected · up to ${formatRs(optimizerPlan.availableSavings)} available from these categories`
+                      : 'Select at least one category to build a plan.'}
+                  </p>
+                </div>
+
                 <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-4 dark:border-paper-300 dark:bg-paper-200/30">
                   <div className="flex items-start justify-between gap-3">
                     <div>
@@ -483,7 +556,7 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                       <h5 className="text-sm font-bold text-gray-800 dark:text-gray-100">Your next moves</h5>
                       <p className="text-[11px] text-gray-500 dark:text-gray-400">Start at the top; suggestions prioritize flexible spending.</p>
                     </div>
-                    <span className="rounded-full bg-gray-100 px-2 py-1 text-[10px] font-bold text-gray-500 dark:bg-paper-300 dark:text-gray-400">{optimizerPlan.suggestions.length} categories</span>
+                    <span className="rounded-full bg-gray-100 px-2 py-1 text-[10px] font-bold text-gray-500 dark:bg-paper-300 dark:text-gray-400">{optimizerPlan.suggestions.length} actions</span>
                   </div>
 
                   {optimizerPlan.suggestions.length > 0 ? (
@@ -493,7 +566,7 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                         const cut = Number(suggestion.cutAmount) || 0
                         const after = Math.max(0, current - cut)
                         const cutPercent = current > 0 ? Math.round((cut / current) * 100) : 0
-                        const isEssential = suggestion.reason === 'Essential category optimization'
+                        const isEssential = suggestion.flexibility === 'essential'
                         return (
                           <li key={`${suggestion.category}-${index}`} className="rounded-xl border border-gray-100 bg-white p-3 dark:border-paper-300 dark:bg-paper-200">
                             <div className="flex items-center justify-between gap-2">
@@ -512,7 +585,7 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                             </div>
                             <div className="mt-1.5 flex items-center gap-1 text-[10px] text-gray-400 dark:text-gray-500">
                               {isEssential ? <AlertCircle size={12} className="text-amber-500" /> : <TrendingDown size={12} className="text-emerald-500" />}
-                              {isEssential ? 'Essential - trim carefully' : 'Flexible spending - start here'}
+                              <span>{suggestion.guidance || (isEssential ? 'Essential - trim carefully' : 'Flexible spending - start here')}</span>
                             </div>
                           </li>
                         )
@@ -520,7 +593,9 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                     </ul>
                   ) : (
                     <div className="rounded-xl border border-amber-100 bg-amber-50 p-3 text-sm leading-relaxed text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/10 dark:text-amber-200">
-                      No category can safely cover this goal. Try a smaller reduction or review uncategorized spending.
+                      {optimizerPlan.selectedCategories.length === 0
+                        ? 'Select the categories you are willing to change to see a realistic plan.'
+                        : `These choices can save up to ${formatRs(optimizerPlan.availableSavings)}. Try a smaller goal or select another category if you need more.`}
                     </div>
                   )}
                 </div>
