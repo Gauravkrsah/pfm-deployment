@@ -407,8 +407,8 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
 
       {/* Advanced Analytics - Budget Optimizer Row */}
       <div className="bg-white dark:bg-paper-100 border border-paper-200/60 dark:border-paper-300/50 rounded-2xl p-5 sm:p-6 shadow-sm overflow-hidden">
-        <div className="flex flex-col items-start xl:flex-row gap-6 xl:gap-8">
-          <div className="xl:w-[38%] flex flex-col gap-4 min-w-0">
+        <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)] xl:gap-8">
+          <div className="flex min-w-0 flex-col gap-4">
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-start gap-3">
                 <span className="mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400">
@@ -478,7 +478,7 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <h5 className="text-sm font-bold text-gray-800 dark:text-gray-100">Which categories can you reduce?</h5>
-                      <p className="mt-1 text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">Select only areas you can realistically change. We started with flexible categories and left essentials off.</p>
+                      <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">Select only areas you can realistically change. We started with flexible categories and left essentials off.</p>
                     </div>
                     {selectedBudgetCategories !== null && (
                       <button
@@ -511,9 +511,9 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                             }`}>
                               {selected && <CheckCircle2 size={12} />}
                             </span>
-                            <span className="truncate text-xs font-semibold">{formatCategory(plan.category)}</span>
+                            <span className="truncate text-sm font-semibold">{formatCategory(plan.category)}</span>
                           </span>
-                          <span className="flex-shrink-0 text-[10px] text-gray-400 dark:text-gray-500">up to {Math.round(plan.maxCutRate * 100)}%</span>
+                          <span className="flex-shrink-0 text-[11px] text-gray-400 dark:text-gray-500">up to {Math.round(plan.maxCutRate * 100)}%</span>
                         </button>
                       )
                     })}
@@ -536,7 +536,7 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                       Show selected only
                     </button>
                   )}
-                  <p className="mt-2 text-[10px] text-gray-500 dark:text-gray-400">
+                  <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
                     {optimizerPlan.selectedCategories.length > 0
                       ? `${optimizerPlan.selectedCategories.length} selected · up to ${formatRs(optimizerPlan.availableSavings)} available from these categories`
                       : 'Select at least one category to build a plan.'}
@@ -546,7 +546,7 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                 <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-4 dark:border-paper-300 dark:bg-paper-200/30">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <div className="text-[10px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">Goal progress</div>
+                      <div className="text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">Goal progress</div>
                       <div className="mt-1 text-sm text-gray-700 dark:text-gray-200">
                         <span className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400">{formatRs(optimizerPlan.achieved)}</span>
                         <span className="text-gray-500 dark:text-gray-400"> of {formatRs(optimizerPlan.target)}</span>
@@ -563,7 +563,7 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                   <div className="mt-3 h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-paper-400">
                     <div className="h-full rounded-full bg-emerald-500 transition-all duration-500" style={{ width: `${optimizerPlan.progress}%` }} />
                   </div>
-                  <div className="mt-1.5 flex justify-between gap-2 text-[11px] text-gray-500 dark:text-gray-400">
+                  <div className="mt-1.5 flex justify-between gap-2 text-xs text-gray-500 dark:text-gray-400">
                     <span>{optimizerPlan.progress}% covered</span>
                     {optimizerPlan.remaining > 0 ? <span>{formatRs(optimizerPlan.remaining)} still needed</span> : <span>Target reached</span>}
                   </div>
@@ -571,80 +571,31 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
 
                 <div className="grid grid-cols-3 gap-2">
                   <div className="rounded-lg border border-gray-100 bg-white p-2.5 dark:border-paper-300 dark:bg-paper-200">
-                    <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Now</div>
-                    <div className="mt-1 text-sm font-bold text-gray-800 dark:text-gray-100">{formatRs(stats.expense)}</div>
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Now</div>
+                    <div className="mt-1 text-base font-bold text-gray-800 dark:text-gray-100">{formatRs(stats.expense)}</div>
                   </div>
                   <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-2.5 dark:border-emerald-900/50 dark:bg-emerald-900/10">
-                    <div className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">Cut</div>
-                    <div className="mt-1 text-sm font-bold text-emerald-700 dark:text-emerald-300">{formatRs(optimizerPlan.achieved)}</div>
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">Cut</div>
+                    <div className="mt-1 text-base font-bold text-emerald-700 dark:text-emerald-300">{formatRs(optimizerPlan.achieved)}</div>
                   </div>
                   <div className="rounded-lg border border-blue-100 bg-blue-50/60 p-2.5 dark:border-blue-900/50 dark:bg-blue-900/10">
-                    <div className="text-[10px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-400">After plan</div>
-                    <div className="mt-1 text-sm font-bold text-blue-700 dark:text-blue-300">{formatRs(optimizerPlan.afterPlan)}</div>
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-400">After plan</div>
+                    <div className="mt-1 text-base font-bold text-blue-700 dark:text-blue-300">{formatRs(optimizerPlan.afterPlan)}</div>
                   </div>
                 </div>
 
-                <div className="flex items-start gap-2 rounded-lg bg-gray-50 px-3 py-2.5 text-[11px] leading-relaxed text-gray-500 dark:bg-paper-200/50 dark:text-gray-400">
+                <div className="flex items-start gap-2 rounded-lg bg-gray-50 px-3 py-2.5 text-xs leading-relaxed text-gray-500 dark:bg-paper-200/50 dark:text-gray-400">
                   <Info size={14} className="mt-0.5 flex-shrink-0 text-gray-400" />
                   <span>This is a suggested spending cap, not an automatic change to your transactions.</span>
                 </div>
 
-                <div>
-                  <div className="mb-2 flex items-center justify-between gap-2">
-                    <div>
-                      <h5 className="text-sm font-bold text-gray-800 dark:text-gray-100">Your next moves</h5>
-                      <p className="text-[11px] text-gray-500 dark:text-gray-400">Start at the top; suggestions prioritize flexible spending.</p>
-                    </div>
-                    <span className="rounded-full bg-gray-100 px-2 py-1 text-[10px] font-bold text-gray-500 dark:bg-paper-300 dark:text-gray-400">{optimizerPlan.suggestions.length} actions</span>
-                  </div>
-
-                  {optimizerPlan.suggestions.length > 0 ? (
-                    <ul className="max-h-[300px] space-y-2 overflow-y-auto pr-1 scrollbar-thin">
-                      {optimizerPlan.suggestions.map((suggestion, index) => {
-                        const current = Number(stats.categories[suggestion.category]) || 0
-                        const cut = Number(suggestion.cutAmount) || 0
-                        const after = Math.max(0, current - cut)
-                        const cutPercent = current > 0 ? Math.round((cut / current) * 100) : 0
-                        const isEssential = suggestion.flexibility === 'essential'
-                        return (
-                          <li key={`${suggestion.category}-${index}`} className="rounded-xl border border-gray-100 bg-white p-3 dark:border-paper-300 dark:bg-paper-200">
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="flex min-w-0 items-center gap-2">
-                                <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-emerald-100 text-[10px] font-bold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">{index + 1}</span>
-                                <span className="truncate text-sm font-semibold text-gray-800 dark:text-gray-100">{formatCategory(suggestion.category)}</span>
-                              </div>
-                              <span className="flex-shrink-0 text-xs font-bold text-emerald-600 dark:text-emerald-400">Save {formatRs(cut)}</span>
-                            </div>
-                            <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-gray-500 dark:text-gray-400">
-                              <span>{formatRs(current)} → {formatRs(after)}</span>
-                              <span>{cutPercent}% lower</span>
-                            </div>
-                            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-paper-400">
-                              <div className="h-full rounded-full bg-emerald-500" style={{ width: `${Math.min(100, cutPercent)}%` }} />
-                            </div>
-                            <div className="mt-1.5 flex items-center gap-1 text-[10px] text-gray-400 dark:text-gray-500">
-                              {isEssential ? <AlertCircle size={12} className="text-amber-500" /> : <TrendingDown size={12} className="text-emerald-500" />}
-                              <span>{suggestion.guidance || (isEssential ? 'Essential - trim carefully' : 'Flexible spending - start here')}</span>
-                            </div>
-                          </li>
-                        )
-                      })}
-                    </ul>
-                  ) : (
-                    <div className="rounded-xl border border-amber-100 bg-amber-50 p-3 text-sm leading-relaxed text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/10 dark:text-amber-200">
-                      {optimizerPlan.selectedCategories.length === 0
-                        ? 'Select the categories you are willing to change to see a realistic plan.'
-                        : `These choices can save up to ${formatRs(optimizerPlan.availableSavings)}. Try a smaller goal or select another category if you need more.`}
-                    </div>
-                  )}
-                </div>
               </>
             ) : (
               <div className="rounded-xl bg-gray-50 p-4 text-sm leading-relaxed text-gray-500 dark:bg-paper-200/50 dark:text-gray-400">Add expenses to get a category-by-category savings plan.</div>
             )}
           </div>
 
-          <div className="xl:w-[62%] self-start rounded-2xl border border-gray-200 bg-gray-50/50 p-4 sm:p-5 dark:border-paper-300 dark:bg-paper-200/20">
+          <div className="min-w-0 self-start rounded-2xl border border-gray-200 bg-gray-50/50 p-4 sm:p-5 dark:border-paper-300 dark:bg-paper-200/20">
             <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <h5 className="text-sm font-bold text-gray-800 dark:text-gray-100">Where to focus first</h5>
@@ -679,6 +630,58 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
               <Info size={14} className="mt-0.5 flex-shrink-0 text-gray-400" />
               <span>Green bars are flexible categories. Amber bars are essential categories you chose to trim carefully.</span>
             </div>
+
+            {optimizerPlan && (
+              <div className="mt-6 border-t border-gray-200 pt-5 dark:border-paper-300">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <div>
+                    <h5 className="text-base font-bold text-gray-800 dark:text-gray-100">Your next moves</h5>
+                    <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Start at the top; these actions prioritize flexible spending.</p>
+                  </div>
+                  <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-bold text-gray-500 dark:bg-paper-300 dark:text-gray-400">{optimizerPlan.suggestions.length} actions</span>
+                </div>
+
+                {optimizerPlan.suggestions.length > 0 ? (
+                  <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    {optimizerPlan.suggestions.map((suggestion, index) => {
+                      const current = Number(stats.categories[suggestion.category]) || 0
+                      const cut = Number(suggestion.cutAmount) || 0
+                      const after = Math.max(0, current - cut)
+                      const cutPercent = current > 0 ? Math.round((cut / current) * 100) : 0
+                      const isEssential = suggestion.flexibility === 'essential'
+                      return (
+                        <li key={`${suggestion.category}-${index}`} className="rounded-xl border border-gray-100 bg-white p-3.5 dark:border-paper-300 dark:bg-paper-200">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex min-w-0 items-center gap-2">
+                              <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-emerald-100 text-[11px] font-bold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">{index + 1}</span>
+                              <span className="truncate text-sm font-semibold text-gray-800 dark:text-gray-100">{formatCategory(suggestion.category)}</span>
+                            </div>
+                            <span className="flex-shrink-0 text-sm font-bold text-emerald-600 dark:text-emerald-400">Save {formatRs(cut)}</span>
+                          </div>
+                          <div className="mt-2 flex items-center justify-between gap-2 text-xs text-gray-500 dark:text-gray-400">
+                            <span>{formatRs(current)} → {formatRs(after)}</span>
+                            <span>{cutPercent}% lower</span>
+                          </div>
+                          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-paper-400">
+                            <div className="h-full rounded-full bg-emerald-500" style={{ width: `${Math.min(100, cutPercent)}%` }} />
+                          </div>
+                          <div className="mt-2 flex items-start gap-1.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                            {isEssential ? <AlertCircle size={14} className="mt-0.5 flex-shrink-0 text-amber-500" /> : <TrendingDown size={14} className="mt-0.5 flex-shrink-0 text-emerald-500" />}
+                            <span>{suggestion.guidance || (isEssential ? 'Essential - trim carefully' : 'Flexible spending - start here')}</span>
+                          </div>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                ) : (
+                  <div className="rounded-xl border border-amber-100 bg-amber-50 p-3.5 text-sm leading-relaxed text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/10 dark:text-amber-200">
+                    {optimizerPlan.selectedCategories.length === 0
+                      ? 'Select the categories you are willing to change to see a realistic plan.'
+                      : `These choices can save up to ${formatRs(optimizerPlan.availableSavings)}. Try a smaller goal or select another category if you need more.`}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -695,7 +698,7 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
           </div>
         </div>
         
-        <div className="flex-1 flex flex-col lg:flex-row items-center gap-8 bg-gray-50/30 dark:bg-paper-200/10 rounded-xl p-4 border border-gray-100/50 dark:border-paper-300/30">
+        <div className="flex-1 flex flex-col lg:flex-row items-start gap-8 bg-gray-50/30 dark:bg-paper-200/10 rounded-xl p-4 border border-gray-100/50 dark:border-paper-300/30">
            <div className="w-full lg:w-2/5 h-[320px]">
              {pieData.length > 0 ? (
                <ResponsiveContainer width="100%" height="100%">
@@ -726,7 +729,7 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
              )}
            </div>
            
-           <div className="w-full lg:w-3/5 grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[320px] overflow-y-auto scrollbar-thin pr-2">
+           <div className="w-full lg:w-3/5 grid grid-cols-1 sm:grid-cols-2 gap-4">
              {pieData.map((item, i) => {
                const percentage = Math.round((item.value / stats.expense) * 100);
                return (
