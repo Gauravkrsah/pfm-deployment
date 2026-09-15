@@ -411,6 +411,7 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
   const [pendingIntent, setPendingIntent] = useState(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [attachment, setAttachment] = useState(null)
+  const [previewImage, setPreviewImage] = useState(null)
   const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
   const [recordingSeconds, setRecordingSeconds] = useState(0)
@@ -581,13 +582,42 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
   useEffect(() => {
     messagesRef.current = messages
 
-    // Do not save temporary image preview URLs because they stop working after
-    // a page reload. Everything else in the conversation is kept locally.
-    const persistableMessages = messages.map(message => message.attachment
-      ? { ...message, attachment: { ...message.attachment, previewUrl: undefined } }
-      : message)
-    localStorage.setItem('pfm_messages', JSON.stringify(persistableMessages))
+    // Canvas previews are compact data URLs and remain valid after a reload.
+    // Blob URLs (used for audio) are temporary and must not be persisted.
+    const persistableMessages = messages.map(message => {
+      if (!message.attachment) return message
+      const previewUrl = message.attachment.previewUrl
+      return {
+        ...message,
+        attachment: {
+          ...message.attachment,
+          previewUrl: previewUrl?.startsWith('data:image/') ? previewUrl : undefined,
+        },
+      }
+    })
+
+    try {
+      localStorage.setItem('pfm_messages', JSON.stringify(persistableMessages))
+    } catch {
+      // Keep chat usable if the browser's local storage quota is full. Text
+      // history is more important than retaining old image thumbnails.
+      const messagesWithoutPreviews = persistableMessages.map(message => message.attachment
+        ? { ...message, attachment: { ...message.attachment, previewUrl: undefined } }
+        : message)
+      try {
+        localStorage.setItem('pfm_messages', JSON.stringify(messagesWithoutPreviews))
+      } catch { }
+    }
   }, [messages])
+
+  useEffect(() => {
+    if (!previewImage) return undefined
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setPreviewImage(null)
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [previewImage])
 
   const fetchExpensesData = useCallback(async () => {
     try {
@@ -2123,11 +2153,19 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
                         {msg.type === 'user' && msg.attachment && (
                           <div className="mb-2">
                             {msg.attachment.type === 'image' && msg.attachment.previewUrl ? (
-                              <img
-                                src={msg.attachment.previewUrl}
-                                alt="User attachment"
-                                className="max-h-52 max-w-full rounded-xl object-contain bg-black/5 dark:bg-black/10"
-                              />
+                              <button
+                                type="button"
+                                onClick={() => setPreviewImage({ src: msg.attachment.previewUrl, name: msg.attachment.name || 'Attached image' })}
+                                aria-label="Preview attached image"
+                                title="Click to preview image"
+                                className="block max-w-full rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/70"
+                              >
+                                <img
+                                  src={msg.attachment.previewUrl}
+                                  alt={msg.attachment.name || 'User attachment'}
+                                  className="max-h-52 max-w-full cursor-zoom-in rounded-xl object-contain bg-black/5 dark:bg-black/10"
+                                />
+                              </button>
                             ) : (
                               <div className="flex items-center gap-1.5 text-[11px] font-medium opacity-70">
                                 {msg.attachment.type === 'image' ? <ImageIcon size={13} /> : <Mic size={13} />}
@@ -2522,6 +2560,33 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
             >
               <X size={17} />
             </button>
+          </div>
+        </div>
+      )}
+
+      {previewImage && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Image preview"
+          onClick={() => setPreviewImage(null)}
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/85 p-4 sm:p-8 backdrop-blur-sm animate-fade-in"
+        >
+          <div className="relative flex max-h-full max-w-6xl flex-col items-center" onClick={(event) => event.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => setPreviewImage(null)}
+              aria-label="Close image preview"
+              className="absolute -right-2 -top-12 flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-white transition-colors hover:bg-white/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            >
+              <X size={22} />
+            </button>
+            <img
+              src={previewImage.src}
+              alt={previewImage.name}
+              className="max-h-[85vh] max-w-full rounded-2xl object-contain shadow-2xl"
+            />
+            <p className="mt-3 max-w-full truncate text-sm font-medium text-white/80">{previewImage.name}</p>
           </div>
         </div>
       )}
