@@ -1604,6 +1604,12 @@ class NLPService:
         loan_signal = bool(re.search(
             r"\b(loan|lent|lend|borrow|borrowed|owe|owes|repaid|repay|return(?:ed)?|paid\s+(?:me\s+)?back|got\s+back|gave\s+.*\s+to|received\s+back)\b",
             normalized,
+        )) or bool(re.search(
+            # "I took 1000 from Ram" is a common handwritten shorthand for
+            # borrowing. Restrict this signal to a person-to-person transfer
+            # so ordinary phrases such as "took a taxi" stay expenses.
+            r"\b(?:i\s+)?took\s+(?:rs\.?\s*)?\d[\d,]*(?:\.\d+)?\s+from\s+[a-z][a-z.'-]*\b",
+            normalized,
         ))
         income_signal = bool(re.search(
             r"\b(salary|salry|sallary|income|wage|wages|bonus|freelance|earned|earning|dividend|commission|paycheck|got\s+paid|payment\s+received|credited)\b",
@@ -1963,7 +1969,45 @@ Rules:
                 message = message or "; ".join(
                     f"{transaction['item']} {abs(transaction['amount'])}" for transaction in transactions
                 )
-                intent = transactions[0]["transaction_type"]
+                # Vision models can read the amount correctly while assigning
+                # a handwritten loan or salary note to the generic Expense
+                # mode. Prefer explicit wording from the supplied text (or
+                # the model's OCR message when no text was supplied) before
+                # routing the record into a write flow.
+                routing_text = prompt or message or brief
+                rule_result = self._rule_based_intent(routing_text)
+                explicit_mode = rule_result.get("intent")
+                if explicit_mode in {"income", "loan"} and rule_result.get("confidence", 0) >= 0.9:
+                    intent = explicit_mode
+                    category = "Income" if explicit_mode == "income" else "Loan"
+                    parsed_transactions = []
+                    try:
+                        parsed_result = self.parser.parse(routing_text)
+                        if isinstance(parsed_result, tuple) and isinstance(parsed_result[0], list):
+                            parsed_transactions = parsed_result[0]
+                    except (TypeError, ValueError, AttributeError):
+                        parsed_transactions = []
+
+                    # The local parser has explicit sign/direction rules for
+                    # phrases such as "took 1000 from Ram" and "salary 50000".
+                    # Copy those factual fields over the model record when it
+                    # recognized the same transaction, while retaining any
+                    # useful visual details from the image.
+                    loan_direction_confirmed = explicit_mode == "income" or any(
+                        str(source.get("category") or "").lower() == "loan" and source.get("paid_by")
+                        for source in parsed_transactions
+                    )
+                    for index, transaction in enumerate(transactions):
+                        transaction["transaction_type"] = explicit_mode
+                        transaction["category"] = category
+                        transaction["needs_confirmation"] = explicit_mode == "loan" and not loan_direction_confirmed
+                        if parsed_transactions:
+                            source = parsed_transactions[min(index, len(parsed_transactions) - 1)]
+                            for field in ("amount", "item", "remarks", "paid_by"):
+                                if source.get(field) not in (None, ""):
+                                    transaction[field] = source[field]
+                else:
+                    intent = transactions[0]["transaction_type"]
             elif not message:
                 message = brief or "Describe the attached image."
                 intent = "chat"

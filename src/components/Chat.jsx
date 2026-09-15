@@ -1312,7 +1312,8 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
     // manually selected mode.
     const shouldClassifyIntent = autoIntentEnabled && !confirmedIntent
     if (shouldClassifyIntent) {
-      if (mediaIntent) {
+      const hasStructuredMediaTransactions = submittedAttachment && mediaTransactions.length > 0
+      if (mediaIntent && !hasStructuredMediaTransactions) {
         resolvedMode = mediaIntent
       } else {
         try {
@@ -1322,7 +1323,12 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
             text: userMsg,
             current_mode: inputMode,
           }, { signal: controller.signal })
-          if (response.data?.needs_confirmation) {
+          // Structured media already has a transaction review step below, so
+          // keep that safer review flow instead of creating a text-only intent
+          // confirmation that would lose the attachment. For media, the text
+          // classifier corrects a multimodal model that tagged a handwritten
+          // loan or income note as an expense.
+          if (response.data?.needs_confirmation && !hasStructuredMediaTransactions) {
             const candidates = Array.isArray(response.data?.candidates)
               ? response.data.candidates.filter(candidate => ['expense', 'income', 'loan'].includes(candidate))
               : ['expense', 'income', 'loan']
@@ -1339,8 +1345,15 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
             finishProcessing()
             return
           }
+          if (response.data?.needs_confirmation && hasStructuredMediaTransactions) {
+            // A media review already protects the write. Keep the media
+            // model's validated transaction mode instead of falling back to
+            // the currently selected tab when text classification is unsure.
+            resolvedMode = mediaIntent || mediaTransactions[0]?.transaction_type || 'expense'
+          }
           if (INPUT_MODES.some(mode => mode.id === response.data?.intent)) {
-            resolvedMode = response.data.intent
+            const classifiedMode = response.data.intent
+            resolvedMode = classifiedMode !== 'chat' || !mediaIntent ? classifiedMode : mediaIntent
           }
         } catch (error) {
           if (axios.isCancel(error) || error.code === 'ERR_CANCELED') {
@@ -1348,7 +1361,7 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
             return
           }
           // A failed classifier must never cause an unintended transaction write.
-          resolvedMode = 'chat'
+          resolvedMode = mediaIntent || (hasStructuredMediaTransactions ? mediaTransactions[0]?.transaction_type : null) || 'chat'
         }
       }
 
@@ -1488,6 +1501,16 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
         // identified by category `Income` and stored as a negative amount.
         let expenses = mediaTransactions.filter(transaction => transaction.transaction_type === 'income')
         let reply = mediaSummary
+        // Re-run the extracted wording through the deterministic parser for
+        // image income notes. This fixes cases where the vision model found
+        // the amount but mislabeled a salary/bonus as an expense.
+        if (submittedAttachment?.type === 'image' && userMsg) {
+          const parsedMediaResponse = await axios.post(`${getApiBaseUrl()}/api/expenses/parse`, { text: userMsg, mode: 'income' }, { signal: controller.signal })
+          if (parsedMediaResponse.data?.expenses?.length) {
+            expenses = parsedMediaResponse.data.expenses
+            reply = parsedMediaResponse.data.reply || reply
+          }
+        }
         if (expenses.length === 0) {
           const response = await axios.post(`${getApiBaseUrl()}/api/expenses/parse`, { text: userMsg, mode: 'income' }, { signal: controller.signal })
           expenses = response.data.expenses || []
@@ -1528,6 +1551,16 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
         // repayment, and receiving money back.
         let expenses = mediaTransactions.filter(transaction => transaction.transaction_type === 'loan')
         let reply = mediaSummary
+        // The regular parser has explicit direction rules (borrowed = money
+        // in, lent = money out), so use it to correct a vision model's loan
+        // direction before saving an image-derived transaction.
+        if (submittedAttachment?.type === 'image' && userMsg) {
+          const parsedMediaResponse = await axios.post(`${getApiBaseUrl()}/api/expenses/parse`, { text: userMsg, mode: 'loan' }, { signal: controller.signal })
+          if (parsedMediaResponse.data?.expenses?.length) {
+            expenses = parsedMediaResponse.data.expenses
+            reply = parsedMediaResponse.data.reply || reply
+          }
+        }
         if (expenses.length === 0) {
           const response = await axios.post(`${getApiBaseUrl()}/api/expenses/parse`, { text: userMsg, mode: 'loan' }, { signal: controller.signal })
           expenses = response.data.expenses || []

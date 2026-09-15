@@ -80,6 +80,7 @@ class IntentClassifierTest(unittest.TestCase):
         self.assertEqual('income', self.classify('record freelance payment 12000'))
         self.assertEqual('loan', self.classify('lent 1000 to Ram'))
         self.assertEqual('loan', self.classify('borrowed 500 from Sita'))
+        self.assertEqual('loan', self.classify('I took 1000 from Ram'))
 
     def test_courteous_add_command_is_not_mistaken_for_a_question(self):
         self.assertEqual('expense', self.classify('can you add coffee 80?'))

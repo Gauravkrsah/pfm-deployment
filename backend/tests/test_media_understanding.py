@@ -4,7 +4,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from services.nlp_service import DEFAULT_MULTIMODAL_MODEL, NLPService
+from services.nlp_service import DEFAULT_MULTIMODAL_MODEL, ExpenseParser, NLPService
 
 
 class MediaUnderstandingTest(unittest.TestCase):
@@ -65,6 +65,51 @@ class MediaUnderstandingTest(unittest.TestCase):
         request = self.service.nim_client.chat.completions.create.call_args.kwargs
         audio_part = request['messages'][0]['content'][1]
         self.assertTrue(audio_part['audio_url']['url'].startswith('data:audio/wav;base64,'))
+
+    def test_explicit_loan_wording_corrects_a_vision_expense_label(self):
+        self.service.parser = ExpenseParser()
+        self.set_model_text('''{
+          "intent":"expense",
+          "message":"I took 1000 from Ram",
+          "brief":"A handwritten note saying I took 1000 from Ram.",
+          "transactions":[{"amount":1000,"item":"cash","category":"Other","remarks":"cash","transaction_type":"expense","confidence":0.91}]
+        }''')
+        self.service._is_meaningful_transaction_item = lambda value: True
+        png = b'\x89PNG\r\n\x1a\n' + b'test-image'
+
+        result = asyncio.run(self.service.understand_media(
+            'image',
+            'image/png',
+            base64.b64encode(png).decode('ascii'),
+        ))
+
+        self.assertEqual('loan', result['intent'])
+        self.assertEqual('loan', result['transactions'][0]['transaction_type'])
+        self.assertEqual('Loan', result['transactions'][0]['category'])
+        self.assertEqual(-1000, result['transactions'][0]['amount'])
+        self.assertEqual('Ram', result['transactions'][0]['paid_by'])
+
+    def test_explicit_income_wording_corrects_a_vision_expense_label(self):
+        self.service.parser = ExpenseParser()
+        self.set_model_text('''{
+          "intent":"expense",
+          "message":"salary 50000",
+          "brief":"A note recording salary 50000.",
+          "transactions":[{"amount":50000,"item":"salary","category":"Other","remarks":"salary","transaction_type":"expense","confidence":0.91}]
+        }''')
+        self.service._is_meaningful_transaction_item = lambda value: True
+        png = b'\x89PNG\r\n\x1a\n' + b'test-image'
+
+        result = asyncio.run(self.service.understand_media(
+            'image',
+            'image/png',
+            base64.b64encode(png).decode('ascii'),
+        ))
+
+        self.assertEqual('income', result['intent'])
+        self.assertEqual('income', result['transactions'][0]['transaction_type'])
+        self.assertEqual('Income', result['transactions'][0]['category'])
+        self.assertEqual(-50000, result['transactions'][0]['amount'])
 
     def test_rejects_unsupported_or_falsely_labeled_media(self):
         with self.assertRaises(ValueError):

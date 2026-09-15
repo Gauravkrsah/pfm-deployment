@@ -6,7 +6,7 @@ import {
   ComposedChart, LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, 
   Tooltip as RechartsTooltip, ResponsiveContainer, 
   PieChart, Pie, Cell, 
-  BarChart, Bar, Legend
+  BarChart, Bar, Legend, LabelList
 } from 'recharts'
 import { AlertCircle, CheckCircle2, Info, Target, TrendingDown } from 'lucide-react'
 
@@ -33,6 +33,7 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
   // null means "use the optimizer's practical defaults". Once the user edits
   // the selection, an array (including []) represents their exact choices.
   const [selectedBudgetCategories, setSelectedBudgetCategories] = useState(null)
+  const [showAllBudgetCategories, setShowAllBudgetCategories] = useState(false)
   const [isGoalMenuOpen, setIsGoalMenuOpen] = useState(false)
   const goalMenuRef = useRef(null)
 
@@ -126,6 +127,7 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
     // start each scope with the safe defaults rather than carrying choices
     // across to another user's data set.
     setSelectedBudgetCategories(null)
+    setShowAllBudgetCategories(false)
   }, [user?.id, currentGroup?.id])
 
   const savingsRate = stats.income > 0 ? Math.round((stats.balance / stats.income) * 100) : 0
@@ -138,14 +140,23 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
   const optimizerData = useMemo(() => {
     if (!optimizerResult) return []
     return optimizerResult.categoryPlans
-      .map(plan => ({
-        category: plan.category,
-        current: plan.amount,
-        afterPlan: Math.max(0, plan.amount - plan.cutAmount),
-        cutAmount: plan.cutAmount,
-      }))
+        .map(plan => ({
+          category: plan.category,
+          current: plan.amount,
+          afterPlan: Math.max(0, plan.amount - plan.cutAmount),
+          cutAmount: plan.cutAmount,
+          flexibility: plan.flexibility,
+        }))
       .sort((a, b) => b.current - a.current)
   }, [optimizerResult])
+
+  const optimizerSavingsData = useMemo(() => (
+    optimizerData
+      .filter(item => item.cutAmount > 0)
+      .sort((a, b) => b.cutAmount - a.cutAmount)
+  ), [optimizerData])
+
+  const optimizerChartHeight = Math.max(250, Math.min(480, optimizerSavingsData.length * 38 + 76))
 
   const optimizerPlan = useMemo(() => {
     if (!optimizerResult) return null
@@ -179,6 +190,16 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
         : [...nextSelection, category]
     })
   }
+
+  const visibleBudgetCategories = useMemo(() => {
+    if (!optimizerResult) return []
+    if (showAllBudgetCategories) return optimizerResult.categoryPlans
+    return optimizerResult.categoryPlans.filter(plan => plan.selected)
+  }, [optimizerResult, showAllBudgetCategories])
+
+  const hiddenBudgetCategoryCount = optimizerResult
+    ? Math.max(0, optimizerResult.categoryPlans.length - visibleBudgetCategories.length)
+    : 0
 
   const pieColors = ['#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16', '#22c55e', '#06b6d4', '#3b82f6'];
   const pieData = Object.keys(stats.categories).map(cat => ({
@@ -386,7 +407,7 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
 
       {/* Advanced Analytics - Budget Optimizer Row */}
       <div className="bg-white dark:bg-paper-100 border border-paper-200/60 dark:border-paper-300/50 rounded-2xl p-5 sm:p-6 shadow-sm overflow-hidden">
-        <div className="flex flex-col xl:flex-row gap-6 xl:gap-8">
+        <div className="flex flex-col items-start xl:flex-row gap-6 xl:gap-8">
           <div className="xl:w-[38%] flex flex-col gap-4 min-w-0">
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-start gap-3">
@@ -470,7 +491,7 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                     )}
                   </div>
                   <div className="mt-3 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                    {optimizerResult.categoryPlans.map(plan => {
+                    {visibleBudgetCategories.map(plan => {
                       const selected = optimizerPlan.selectedCategories.some(category => String(category).toLowerCase() === String(plan.category).toLowerCase())
                       return (
                         <button
@@ -497,6 +518,24 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                       )
                     })}
                   </div>
+                  {hiddenBudgetCategoryCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllBudgetCategories(true)}
+                      className="mt-2 text-[11px] font-semibold text-emerald-700 hover:text-emerald-900 dark:text-emerald-300 dark:hover:text-emerald-100"
+                    >
+                      Show {hiddenBudgetCategoryCount} more categor{hiddenBudgetCategoryCount === 1 ? 'y' : 'ies'}
+                    </button>
+                  )}
+                  {showAllBudgetCategories && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllBudgetCategories(false)}
+                      className="mt-2 text-[11px] font-semibold text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
+                    >
+                      Show selected only
+                    </button>
+                  )}
                   <p className="mt-2 text-[10px] text-gray-500 dark:text-gray-400">
                     {optimizerPlan.selectedCategories.length > 0
                       ? `${optimizerPlan.selectedCategories.length} selected · up to ${formatRs(optimizerPlan.availableSavings)} available from these categories`
@@ -605,34 +644,40 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
             )}
           </div>
 
-          <div className="xl:w-[62%] min-h-[420px] rounded-2xl border border-gray-200 bg-gray-50/50 p-4 sm:p-5 dark:border-paper-300 dark:bg-paper-200/20">
+          <div className="xl:w-[62%] self-start rounded-2xl border border-gray-200 bg-gray-50/50 p-4 sm:p-5 dark:border-paper-300 dark:bg-paper-200/20">
             <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <h5 className="text-sm font-bold text-gray-800 dark:text-gray-100">Where the plan changes spending</h5>
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Compare what you spend now with the suggested cap after the cuts.</p>
+                <h5 className="text-sm font-bold text-gray-800 dark:text-gray-100">Where to focus first</h5>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Each bar is the amount this plan can save in a category you selected.</p>
               </div>
-              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500"><TrendingDown size={13} /> Lower is better</span>
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500"><TrendingDown size={13} /> Bigger bar = bigger saving</span>
             </div>
-            {optimizerData.length > 0 ? (
-              <div className="mt-3 h-[400px]">
+            {optimizerSavingsData.length > 0 ? (
+              <div className="mt-3" style={{ height: `${optimizerChartHeight}px` }}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart layout="vertical" data={optimizerData} margin={{ top: 8, right: 8, left: 4, bottom: 4 }} barCategoryGap="18%">
+                  <BarChart layout="vertical" data={optimizerSavingsData} margin={{ top: 8, right: 52, left: 4, bottom: 4 }} barCategoryGap="24%">
                     <CartesianGrid strokeDasharray="3 3" horizontal={false} opacity={0.2} />
                     <XAxis type="number" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={value => `Rs.${Math.round(value / 1000)}k`} />
                     <YAxis type="category" dataKey="category" width={112} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={formatCategory} />
                     <RechartsTooltip content={<CustomTooltip />} cursor={{ fill: 'transparent' }} />
-                    <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
-                    <Bar dataKey="current" name="Current spend" fill="#94a3b8" radius={[0, 4, 4, 0]} barSize={10} />
-                    <Bar dataKey="afterPlan" name="After plan" fill="#10b981" radius={[0, 4, 4, 0]} barSize={10} />
+                    <Bar dataKey="cutAmount" name="Planned saving" fill="#10b981" radius={[0, 5, 5, 0]} barSize={18}>
+                      {optimizerSavingsData.map((entry, index) => (
+                        <Cell key={`optimizer-save-${entry.category}-${index}`} fill={entry.flexibility === 'essential' ? '#f59e0b' : '#10b981'} />
+                      ))}
+                      <LabelList dataKey="cutAmount" position="right" fill="#6b7280" fontSize={10} formatter={value => formatRs(value)} />
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             ) : (
-              <div className="flex h-[400px] items-center justify-center text-sm text-gray-400">Add categorized expenses to compare spending.</div>
+              <div className="flex h-[300px] flex-col items-center justify-center gap-2 text-center text-sm text-gray-400">
+                <Target size={22} className="text-gray-300 dark:text-gray-600" />
+                <span>Select a category you can reduce to see its savings impact.</span>
+              </div>
             )}
             <div className="mt-2 flex items-start gap-2 rounded-lg border border-gray-100 bg-white/70 px-3 py-2 text-[11px] leading-relaxed text-gray-500 dark:border-paper-300 dark:bg-paper-200/60 dark:text-gray-400">
               <Info size={14} className="mt-0.5 flex-shrink-0 text-gray-400" />
-              <span>Gray is your current category total. Green is the amount left after following the suggested cut.</span>
+              <span>Green bars are flexible categories. Amber bars are essential categories you chose to trim carefully.</span>
             </div>
           </div>
         </div>
