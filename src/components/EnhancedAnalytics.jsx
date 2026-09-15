@@ -3,10 +3,10 @@ import { supabase } from '../supabase'
 import DateRangePicker, { getDateRange } from './ui/DateRangePicker'
 import { calculateMovingAverage, optimizeBudget } from '../utils/algorithms'
 import { 
-  ComposedChart, LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, 
+  ComposedChart, Line, Area, XAxis, YAxis, CartesianGrid,
   Tooltip as RechartsTooltip, ResponsiveContainer, 
   PieChart, Pie, Cell, 
-  BarChart, Bar, Legend, LabelList
+  BarChart, Bar, LabelList
 } from 'recharts'
 import { AlertCircle, CheckCircle2, Info, Target, TrendingDown } from 'lucide-react'
 
@@ -17,6 +17,32 @@ const formatRs = (value) => `Rs.${Math.round(Number(value) || 0).toLocaleString(
 const formatCategory = (value) => String(value || 'Other')
   .replace(/[-_]+/g, ' ')
   .replace(/\b\w/g, letter => letter.toUpperCase())
+
+const ANALYTICS_SECTION_CLASS = 'flex flex-col overflow-hidden rounded-2xl border border-paper-200/60 bg-white p-5 shadow-sm dark:border-paper-300/50 dark:bg-paper-100 sm:p-6'
+const ANALYTICS_PANEL_CLASS = 'rounded-xl border border-gray-100 bg-gray-50/50 dark:border-paper-300 dark:bg-paper-200/20'
+const SECTION_TONE_CLASS = {
+  indigo: 'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400',
+  emerald: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400',
+  orange: 'bg-orange-50 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400',
+  blue: 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400',
+}
+
+function SectionHeading({ icon, title, description, tone = 'indigo', trailing = null }) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <div className="flex min-w-0 items-start gap-3">
+        <span className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl text-base ${SECTION_TONE_CLASS[tone] || SECTION_TONE_CLASS.indigo}`}>
+          {icon}
+        </span>
+        <div className="min-w-0">
+          <h3 className="text-lg font-bold leading-tight text-gray-900 dark:text-gray-100">{title}</h3>
+          {description && <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">{description}</p>}
+        </div>
+      </div>
+      {trailing}
+    </div>
+  )
+}
 
 export default function EnhancedAnalytics({ currentGroup, user }) {
   const [stats, setStats] = useState({
@@ -302,9 +328,9 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
         {/* Expenses Card */}
         <div className="bg-red-50 dark:bg-red-900/10 p-3 md:p-4 rounded-xl border border-red-100 dark:border-red-900/20 shadow-sm relative overflow-hidden min-w-[170px] md:min-w-0 flex-shrink-0 md:flex-shrink transition-colors">
           <div className="relative z-10 flex flex-col">
-            <div className="text-[10px] md:text-xs font-semibold text-red-800 dark:text-red-300 uppercase tracking-wide mb-1">Total Expenses</div>
+            <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-red-800 dark:text-red-300">Total Expenses</div>
             <div className="text-lg md:text-2xl font-bold text-red-900 dark:text-red-100">Rs.{stats.expense.toLocaleString()}</div>
-            <div className="text-[10px] md:text-xs text-red-600 dark:text-red-400 mt-1">Money leaving your wallet</div>
+            <div className="mt-1 text-xs text-red-600 dark:text-red-400">Money leaving your wallet</div>
           </div>
           <div className="absolute right-0 bottom-0 opacity-5 dark:opacity-10 transform translate-x-1/4 translate-y-1/4 text-red-900 dark:text-red-500">
             <svg width="70" height="70" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1.41 16.09V20h-2.67v-1.93c-1.71-.36-3.16-1.46-3.27-3.4h1.96c.1 1.05 1.18 1.91 2.53 1.91 1.29 0 2.13-.73 2.13-1.65 0-1.22-1.28-1.57-3.04-1.93-2.26-.47-4.14-1.29-4.14-3.56 0-1.84 1.37-2.92 3.82-3.32V4h2.67v1.89c1.4.31 2.54 1.25 2.76 3.01h-2c-.17-.9-1.07-1.54-1.99-1.54-1.12 0-1.77.67-1.77 1.48 0 1.13 1.27 1.47 2.89 1.83 2.45.54 4.29 1.35 4.29 3.65 0 1.96-1.56 3.12-3.57 3.48z" /></svg>
@@ -314,9 +340,9 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
         {/* Income Card */}
         <div className="bg-green-50 dark:bg-green-900/10 p-3 md:p-4 rounded-xl border border-green-100 dark:border-green-900/20 shadow-sm relative overflow-hidden min-w-[170px] md:min-w-0 flex-shrink-0 md:flex-shrink transition-colors">
           <div className="relative z-10 flex flex-col">
-            <div className="text-[10px] md:text-xs font-semibold text-green-800 dark:text-green-300 uppercase tracking-wide mb-1">Total Income</div>
+            <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-green-800 dark:text-green-300">Total Income</div>
             <div className="text-lg md:text-2xl font-bold text-green-900 dark:text-green-100">Rs.{stats.income.toLocaleString()}</div>
-            <div className="text-[10px] md:text-xs text-green-600 dark:text-green-400 mt-1">Money earned this period</div>
+            <div className="mt-1 text-xs text-green-600 dark:text-green-400">Money earned this period</div>
           </div>
           <div className="absolute right-0 bottom-0 opacity-5 dark:opacity-10 transform translate-x-1/4 translate-y-1/4 text-green-900 dark:text-green-500">
             <svg width="70" height="70" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1.41 16.09V20h-2.67v-1.93c-1.71-.36-3.16-1.46-3.27-3.4h1.96c.1 1.05 1.18 1.91 2.53 1.91 1.29 0 2.13-.73 2.13-1.65 0-1.22-1.28-1.57-3.04-1.93-2.26-.47-4.14-1.29-4.14-3.56 0-1.84 1.37-2.92 3.82-3.32V4h2.67v1.89c1.4.31 2.54 1.25 2.76 3.01h-2c-.17-.9-1.07-1.54-1.99-1.54-1.12 0-1.77.67-1.77 1.48 0 1.13 1.27 1.47 2.89 1.83 2.45.54 4.29 1.35 4.29 3.65 0 1.96-1.56 3.12-3.57 3.48z" /></svg>
@@ -329,11 +355,11 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
           : 'bg-gradient-to-br from-red-50 to-orange-100/50 border-red-200 dark:from-red-900/10 dark:to-orange-900/20 dark:border-red-800/30'
           }`}>
           <div className="relative z-10 flex flex-col">
-            <div className={`text-[10px] md:text-xs font-semibold uppercase tracking-wide mb-1 ${stats.balance >= 0 ? 'text-green-800 dark:text-green-300' : 'text-red-800 dark:text-red-300'}`}>Net Balance</div>
+            <div className={`mb-1 text-xs font-semibold uppercase tracking-wide ${stats.balance >= 0 ? 'text-green-800 dark:text-green-300' : 'text-red-800 dark:text-red-300'}`}>Net Balance</div>
             <div className={`text-lg md:text-2xl font-bold ${stats.balance >= 0 ? 'text-green-900 dark:text-green-100' : 'text-red-900 dark:text-red-100'}`}>
               Rs.{Math.abs(stats.balance).toLocaleString()}
             </div>
-             <div className={`text-[10px] md:text-xs mt-1 ${stats.balance >= 0 ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`}>
+             <div className={`mt-1 text-xs ${stats.balance >= 0 ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`}>
               {stats.balance >= 0 ? '✨ You are in the green!' : '⚠️ Deficit detected'}
             </div>
           </div>
@@ -344,32 +370,26 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
       </div>
 
       {/* Advanced Analytics - Daily Spending Trends Row */}
-      <div className="bg-white dark:bg-paper-100 border border-paper-200/60 dark:border-paper-300/50 rounded-2xl p-6 shadow-sm overflow-hidden">
+      <div className={ANALYTICS_SECTION_CLASS}>
         <div className="flex flex-col lg:flex-row gap-8">
           
-          <div className="lg:w-1/3 flex flex-col gap-4">
-            <h4 className="font-bold text-xl text-indigo-900 dark:text-indigo-100 flex items-center gap-2">
-              <span className="p-2 bg-indigo-50 dark:bg-indigo-900/30 rounded-xl text-indigo-600 dark:text-indigo-400">📈</span>
-              Daily Spending Trends
-            </h4>
-            <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
-              {trendsExplainer}
-            </p>
+          <div className="flex flex-col gap-4 lg:w-1/3">
+            <SectionHeading icon="📈" title="Daily Spending Trends" description={trendsExplainer} tone="indigo" />
 
             {algorithms.trends && algorithms.trends.movingAverageData.length > 0 ? (
                  <div className="mt-2 flex flex-col gap-4">
-                   <div className="bg-indigo-50 dark:bg-indigo-900/10 rounded-xl p-5 border border-indigo-100 dark:border-indigo-800/30">
+                   <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-4 dark:border-indigo-800/30 dark:bg-indigo-900/10">
                      <div className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 mb-2 uppercase tracking-wide">Average Daily Spend</div>
                      <div className="flex items-baseline gap-1 break-words">
                        <span className="text-sm font-semibold text-indigo-700 dark:text-indigo-300">Rs.</span>
-                       <span className="text-3xl font-extrabold text-indigo-700 dark:text-indigo-300">
+                       <span className="text-2xl font-extrabold text-indigo-700 dark:text-indigo-300">
                          {Math.round(algorithms.trends.avgDailySpend).toLocaleString()}
                        </span>
                      </div>
                    </div>
 
                    <div className="rounded-xl p-4 border text-sm bg-orange-50 dark:bg-orange-900/10 border-orange-200 text-orange-800 dark:text-orange-200">
-                     <div className="font-bold mb-1 border-b border-orange-200/50 pb-2">Highest Spend Day</div>
+                     <div className="mb-1 border-b border-orange-200/50 pb-2 font-bold">Highest Spend Day</div>
                      <div className="text-2xl font-bold mt-2 break-words">
                        Rs.{Math.round(algorithms.trends.highestDay).toLocaleString()}
                      </div>
@@ -380,8 +400,8 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
             )}
           </div>
 
-          <div className="lg:w-2/3 min-h-[300px] border border-gray-100 dark:border-paper-300 rounded-xl p-4 bg-gray-50/50 dark:bg-paper-200/20">
-            <h5 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4 text-center">Historical Daily Spend & Moving Avg (7D)</h5>
+          <div className={`${ANALYTICS_PANEL_CLASS} min-h-[300px] p-4 lg:w-2/3`}>
+            <h4 className="mb-4 text-center text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Historical Daily Spend & Moving Avg (7D)</h4>
             {algorithms.trends && algorithms.trends.movingAverageData.length > 0 ? (
                <ResponsiveContainer width="100%" height="90%">
                  <ComposedChart data={algorithms.trends.movingAverageData}>
@@ -407,25 +427,20 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
       </div>
 
       {/* Advanced Analytics - Budget Optimizer Row */}
-      <div className="bg-white dark:bg-paper-100 border border-paper-200/60 dark:border-paper-300/50 rounded-2xl p-5 sm:p-6 shadow-sm overflow-hidden">
+      <div className={ANALYTICS_SECTION_CLASS}>
         <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)] xl:gap-8">
           <div className="flex min-w-0 flex-col gap-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-start gap-3">
-                <span className="mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400">
-                  <Target size={20} strokeWidth={2.2} />
-                </span>
-                <div>
-                  <h4 className="font-bold text-xl leading-tight text-emerald-950 dark:text-emerald-100">Budget Optimizer</h4>
-                  <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">A what-if plan to lower spending from the categories you can change first.</p>
-                </div>
-              </div>
-              <span className="hidden sm:inline-flex flex-shrink-0 rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-gray-500 dark:bg-paper-300 dark:text-gray-400">Guide</span>
-            </div>
+            <SectionHeading
+              icon={<Target size={18} strokeWidth={2.2} />}
+              title="Budget Optimizer"
+              description="A what-if plan to lower spending from the categories you can change first."
+              tone="emerald"
+              trailing={<span className="hidden flex-shrink-0 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-gray-500 dark:bg-paper-300 dark:text-gray-400 sm:inline-flex">Guide</span>}
+            />
 
             <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-100 bg-emerald-50/50 px-3.5 py-3 dark:border-emerald-900/50 dark:bg-emerald-900/10">
               <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">Target reduction</label>
+                <label className="block text-xs font-bold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">Target reduction</label>
                 <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Choose how much less to spend</p>
               </div>
               <div className="relative w-32 flex-shrink-0" ref={goalMenuRef}>
@@ -485,7 +500,7 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                       <button
                         type="button"
                         onClick={() => setSelectedBudgetCategories(null)}
-                        className="flex-shrink-0 text-[10px] font-bold text-emerald-700 hover:text-emerald-900 dark:text-emerald-300 dark:hover:text-emerald-100"
+                        className="flex-shrink-0 text-xs font-bold text-emerald-700 hover:text-emerald-900 dark:text-emerald-300 dark:hover:text-emerald-100"
                       >
                         Reset
                       </button>
@@ -514,7 +529,7 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                             </span>
                             <span className="truncate text-sm font-semibold">{formatCategory(plan.category)}</span>
                           </span>
-                          <span className="flex-shrink-0 text-[11px] text-gray-400 dark:text-gray-500">up to {Math.round(plan.maxCutRate * 100)}%</span>
+                          <span className="flex-shrink-0 text-xs text-gray-400 dark:text-gray-500">up to {Math.round(plan.maxCutRate * 100)}%</span>
                         </button>
                       )
                     })}
@@ -523,7 +538,7 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                     <button
                       type="button"
                       onClick={() => setShowAllBudgetCategories(true)}
-                      className="mt-2 text-[11px] font-semibold text-emerald-700 hover:text-emerald-900 dark:text-emerald-300 dark:hover:text-emerald-100"
+                      className="mt-2 text-xs font-semibold text-emerald-700 hover:text-emerald-900 dark:text-emerald-300 dark:hover:text-emerald-100"
                     >
                       Show {hiddenBudgetCategoryCount} more categor{hiddenBudgetCategoryCount === 1 ? 'y' : 'ies'}
                     </button>
@@ -532,7 +547,7 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                     <button
                       type="button"
                       onClick={() => setShowAllBudgetCategories(false)}
-                      className="mt-2 text-[11px] font-semibold text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
+                      className="mt-2 text-xs font-semibold text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
                     >
                       Show selected only
                     </button>
@@ -553,7 +568,7 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                         <span className="text-gray-500 dark:text-gray-400"> of {formatRs(optimizerPlan.target)}</span>
                       </div>
                     </div>
-                    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold ${optimizerPlan.targetMet
+                    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${optimizerPlan.targetMet
                       ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
                       : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
                     }`}>
@@ -572,15 +587,15 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
 
                 <div className="grid grid-cols-3 gap-2">
                   <div className="rounded-lg border border-gray-100 bg-white p-2.5 dark:border-paper-300 dark:bg-paper-200">
-                    <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Now</div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-gray-400">Now</div>
                     <div className="mt-1 text-base font-bold text-gray-800 dark:text-gray-100">{formatRs(stats.expense)}</div>
                   </div>
                   <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-2.5 dark:border-emerald-900/50 dark:bg-emerald-900/10">
-                    <div className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">Cut</div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">Cut</div>
                     <div className="mt-1 text-base font-bold text-emerald-700 dark:text-emerald-300">{formatRs(optimizerPlan.achieved)}</div>
                   </div>
                   <div className="rounded-lg border border-blue-100 bg-blue-50/60 p-2.5 dark:border-blue-900/50 dark:bg-blue-900/10">
-                    <div className="text-[11px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-400">After plan</div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-400">After plan</div>
                     <div className="mt-1 text-base font-bold text-blue-700 dark:text-blue-300">{formatRs(optimizerPlan.afterPlan)}</div>
                   </div>
                 </div>
@@ -596,13 +611,13 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
             )}
           </div>
 
-          <div className="min-w-0 self-start rounded-2xl border border-gray-200 bg-gray-50/50 p-4 sm:p-5 dark:border-paper-300 dark:bg-paper-200/20">
+          <div className={`${ANALYTICS_PANEL_CLASS} min-w-0 self-start p-4 sm:p-5`}>
             <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <h5 className="text-sm font-bold text-gray-800 dark:text-gray-100">Where to focus first</h5>
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Each bar is the amount this plan can save in a category you selected.</p>
               </div>
-              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500"><TrendingDown size={13} /> Bigger bar = bigger saving</span>
+              <span className="inline-flex items-center gap-1 text-xs font-semibold text-gray-400 dark:text-gray-500"><TrendingDown size={13} /> Bigger bar = bigger saving</span>
             </div>
             {optimizerSavingsData.length > 0 ? (
               <div className="mt-3" style={{ height: `${optimizerChartHeight}px` }}>
@@ -627,7 +642,7 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                 <span>Select a category you can reduce to see its savings impact.</span>
               </div>
             )}
-            <div className="mt-2 flex items-start gap-2 rounded-lg border border-gray-100 bg-white/70 px-3 py-2 text-[11px] leading-relaxed text-gray-500 dark:border-paper-300 dark:bg-paper-200/60 dark:text-gray-400">
+            <div className="mt-2 flex items-start gap-2 rounded-lg border border-gray-100 bg-white/70 px-3 py-2 text-xs leading-relaxed text-gray-500 dark:border-paper-300 dark:bg-paper-200/60 dark:text-gray-400">
               <Info size={14} className="mt-0.5 flex-shrink-0 text-gray-400" />
               <span>Green bars are flexible categories. Amber bars are essential categories you chose to trim carefully.</span>
             </div>
@@ -639,7 +654,7 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                     <h5 className="text-base font-bold text-gray-800 dark:text-gray-100">Your next moves</h5>
                     <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Start at the top; these actions prioritize flexible spending.</p>
                   </div>
-                  <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-bold text-gray-500 dark:bg-paper-300 dark:text-gray-400">{optimizerPlan.suggestions.length} actions</span>
+                  <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-bold text-gray-500 dark:bg-paper-300 dark:text-gray-400">{optimizerPlan.suggestions.length} actions</span>
                 </div>
 
                 {optimizerPlan.suggestions.length > 0 ? (
@@ -654,17 +669,29 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                         <li key={`${suggestion.category}-${index}`} className="rounded-xl border border-gray-100 bg-white p-3.5 dark:border-paper-300 dark:bg-paper-200">
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex min-w-0 items-center gap-2">
-                              <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-emerald-100 text-[11px] font-bold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">{index + 1}</span>
+                              <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs font-bold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">{index + 1}</span>
                               <span className="truncate text-sm font-semibold text-gray-800 dark:text-gray-100">{formatCategory(suggestion.category)}</span>
                             </div>
                             <span className="flex-shrink-0 text-sm font-bold text-emerald-600 dark:text-emerald-400">Save {formatRs(cut)}</span>
                           </div>
                           <div className="mt-2 flex items-center justify-between gap-2 text-xs text-gray-500 dark:text-gray-400">
                             <span>{formatRs(current)} → {formatRs(after)}</span>
-                            <span>{cutPercent}% lower</span>
+                            <span>Save {cutPercent}%</span>
                           </div>
-                          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-paper-400">
-                            <div className="h-full rounded-full bg-emerald-500" style={{ width: `${Math.min(100, cutPercent)}%` }} />
+                          <div
+                            className="mt-2 flex h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-paper-400"
+                            role="progressbar"
+                            aria-label={`${formatCategory(suggestion.category)} spending after plan`}
+                            aria-valuemin="0"
+                            aria-valuemax="100"
+                            aria-valuenow={Math.max(0, 100 - cutPercent)}
+                          >
+                            <div className="h-full bg-slate-400 dark:bg-slate-500" style={{ width: `${Math.max(0, 100 - cutPercent)}%` }} />
+                            <div className="h-full bg-emerald-500" style={{ width: `${Math.min(100, cutPercent)}%` }} />
+                          </div>
+                          <div className="mt-1 flex items-center justify-between text-xs text-gray-400 dark:text-gray-500">
+                            <span>{Math.max(0, 100 - cutPercent)}% remains</span>
+                            <span className="text-emerald-600 dark:text-emerald-400">{cutPercent}% saved</span>
                           </div>
                           <div className="mt-2 flex items-start gap-1.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
                             {isEssential ? <AlertCircle size={14} className="mt-0.5 flex-shrink-0 text-amber-500" /> : <TrendingDown size={14} className="mt-0.5 flex-shrink-0 text-emerald-500" />}
@@ -688,18 +715,12 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
       </div>
 
       {/* Expense Breakdown Row */}
-      <div className="bg-white dark:bg-paper-100 border border-paper-200/60 dark:border-paper-300/50 rounded-2xl p-6 shadow-sm flex flex-col">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
-          <div>
-            <h4 className="font-bold text-xl text-gray-900 dark:text-gray-100 flex items-center gap-2 mb-1">
-              <span className="p-2 bg-orange-50 dark:bg-orange-900/30 rounded-xl text-orange-600 dark:text-orange-400">📊</span>
-              Expense Breakdown
-            </h4>
-            <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed max-w-2xl">{breakdownExplainer}</p>
-          </div>
+      <div className={ANALYTICS_SECTION_CLASS}>
+        <div className="mb-6">
+          <SectionHeading icon="📊" title="Expense Breakdown" description={breakdownExplainer} tone="orange" />
         </div>
         
-        <div className="flex-1 flex flex-col lg:flex-row items-start gap-8 bg-gray-50/30 dark:bg-paper-200/10 rounded-xl p-4 border border-gray-100/50 dark:border-paper-300/30">
+        <div className={`${ANALYTICS_PANEL_CLASS} flex flex-1 flex-col items-start gap-8 bg-gray-50/30 p-4 dark:bg-paper-200/10 lg:flex-row`}>
            <div className="w-full lg:w-2/5 flex-shrink-0">
              <div className="relative h-[300px]">
              {pieData.length > 0 ? (
@@ -741,12 +762,12 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
              {largestCategory && (
                <div className="mt-4 grid grid-cols-2 gap-3">
                  <div className="rounded-xl border border-orange-100 bg-orange-50/70 p-3 dark:border-orange-900/40 dark:bg-orange-900/10">
-                   <div className="text-[10px] font-bold uppercase tracking-wide text-orange-700 dark:text-orange-300">Largest area</div>
+                   <div className="text-xs font-bold uppercase tracking-wide text-orange-700 dark:text-orange-300">Largest area</div>
                    <div className="mt-1 truncate text-sm font-bold text-gray-800 dark:text-gray-100">{formatCategory(largestCategory.name)}</div>
                    <div className="mt-0.5 text-xs text-orange-700 dark:text-orange-300">{formatRs(largestCategory.value)} · {Math.round((largestCategory.value / stats.expense) * 100)}%</div>
                  </div>
                  <div className="rounded-xl border border-gray-200 bg-white p-3 dark:border-paper-300 dark:bg-paper-200">
-                   <div className="text-[10px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">Categories</div>
+                   <div className="text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">Categories</div>
                    <div className="mt-1 text-lg font-extrabold text-gray-800 dark:text-gray-100">{pieData.length}</div>
                    <div className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">tracked this period</div>
                  </div>
@@ -765,7 +786,7 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                    </div>
                    <div className="flex flex-col items-end">
                      <span className="text-sm font-bold text-gray-900 dark:text-white">{formatRs(item.value)}</span>
-                     <span className="mt-1 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500 dark:bg-paper-300">{percentage}%</span>
+                     <span className="mt-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500 dark:bg-paper-300">{percentage}%</span>
                    </div>
                  </div>
                );
@@ -776,18 +797,15 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
       </div>
 
       {/* Financial Summary Row */}
-      <div className="bg-white dark:bg-paper-100 border border-paper-200/60 dark:border-paper-300/50 rounded-2xl p-6 shadow-sm flex flex-col">
+      <div className={ANALYTICS_SECTION_CLASS}>
         <div className="mb-6">
-          <h4 className="font-bold text-xl text-gray-900 dark:text-gray-100 flex items-center gap-2 mb-1">
-             <span className="p-2 bg-blue-50 dark:bg-blue-900/30 rounded-xl text-blue-600 dark:text-blue-400">📋</span>
-             Financial Summary
-          </h4>
-          <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed max-w-2xl">{summaryExplainer}</p>
+          <SectionHeading icon="📋" title="Financial Summary" description={summaryExplainer} tone="blue" />
         </div>
 
         <div className="flex-1 flex flex-col lg:flex-row items-stretch gap-8">
-           <div className="w-full lg:w-2/3 h-[300px] bg-gray-50/50 dark:bg-paper-200/20 rounded-xl border border-gray-100 dark:border-paper-300 p-4">
-             <ResponsiveContainer width="100%" height="100%">
+           <div className={`${ANALYTICS_PANEL_CLASS} h-[300px] w-full p-4 lg:w-2/3`}>
+             <h4 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Income, expenses & balance</h4>
+             <ResponsiveContainer width="100%" height="88%">
                <BarChart data={summaryData} margin={{top: 20, right: 20, left: 10, bottom: 0}}>
                  <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
                  <XAxis dataKey="name" tick={{fontSize: 13, fontWeight: 500}} tickLine={false} axisLine={false} />
@@ -803,10 +821,10 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
            </div>
 
            <div className="w-full lg:w-1/3 flex flex-col justify-between space-y-4">
-              <div className="bg-indigo-50/50 dark:bg-indigo-900/10 p-5 rounded-xl border border-indigo-100 dark:border-indigo-800/30 flex-1 flex flex-col justify-center">
+              <div className="flex flex-1 flex-col justify-center rounded-xl border border-indigo-100 bg-indigo-50/50 p-4 dark:border-indigo-800/30 dark:bg-indigo-900/10">
                 <div className="flex justify-between items-end mb-2">
                    <span className="text-sm font-semibold text-indigo-900 dark:text-indigo-300">Savings Rate</span>
-                   <span className="text-3xl font-extrabold text-indigo-600 dark:text-indigo-400">{savingsRate}%</span>
+                   <span className="text-2xl font-extrabold text-indigo-600 dark:text-indigo-400">{savingsRate}%</span>
                 </div>
                 <p className="text-xs text-indigo-600/70 dark:text-indigo-400/70 mb-4">
                   {savingsRate > 20 ? 'Great job! You are saving a healthy amount of your income.' : 'Try to optimize your budget to increase your savings rate.'}
@@ -816,7 +834,7 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                 </div>
               </div>
               
-              <div className="bg-gray-50/80 dark:bg-paper-200/50 p-5 rounded-xl border border-gray-100 dark:border-paper-300 space-y-4">
+              <div className="space-y-4 rounded-xl border border-gray-100 bg-gray-50/80 p-4 dark:border-paper-300 dark:bg-paper-200/50">
                 <div className="flex justify-between items-center bg-white dark:bg-paper-300 p-3 rounded-lg shadow-sm">
                    <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Net Loan Position</span>
                    <span className={`text-sm font-bold ${stats.loanOut >= stats.loanIn ? 'text-teal-600 dark:text-teal-400' : 'text-orange-600 dark:text-orange-400'}`}>
