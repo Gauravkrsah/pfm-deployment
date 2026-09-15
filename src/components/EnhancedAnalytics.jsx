@@ -8,8 +8,15 @@ import {
   PieChart, Pie, Cell, 
   BarChart, Bar, Legend
 } from 'recharts'
+import { AlertCircle, CheckCircle2, Info, Target, TrendingDown } from 'lucide-react'
 
 const SAVINGS_GOAL_OPTIONS = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 60, 70, 80]
+
+const formatRs = (value) => `Rs.${Math.round(Number(value) || 0).toLocaleString()}`
+
+const formatCategory = (value) => String(value || 'Other')
+  .replace(/[-_]+/g, ' ')
+  .replace(/\b\w/g, letter => letter.toUpperCase())
 
 export default function EnhancedAnalytics({ currentGroup, user }) {
   const [stats, setStats] = useState({
@@ -121,16 +128,35 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
     algorithms.optimization.suggestions.forEach(c => cutsMap[c.category] = c.cutAmount);
     
     return Object.keys(stats.categories).map(cat => {
-       const current = stats.categories[cat];
-       const cut = cutsMap[cat] || 0;
+       const current = Number(stats.categories[cat]) || 0;
+       const cut = Number(cutsMap[cat]) || 0;
        return {
           category: cat,
-          amount: current,
-          "Target Spending": current - cut,
-          "Projected Savings": cut
+          current,
+          afterPlan: Math.max(0, current - cut),
+          cutAmount: cut,
        };
-    }).sort((a,b) => b.amount - a.amount);
+    }).sort((a,b) => b.current - a.current);
   }, [algorithms.optimization, stats.categories]);
+
+  const optimizerPlan = useMemo(() => {
+    if (!algorithms.optimization || stats.expense <= 0) return null
+
+    const target = Number(algorithms.optimization.targetSavings) || 0
+    const achieved = Number(algorithms.optimization.achievedCuts) || 0
+    const remaining = Math.max(0, target - achieved)
+    const progress = target > 0 ? Math.min(100, Math.round((achieved / target) * 100)) : 0
+
+    return {
+      target,
+      achieved,
+      remaining,
+      progress,
+      afterPlan: Math.max(0, stats.expense - achieved),
+      suggestions: algorithms.optimization.suggestions || [],
+      targetMet: remaining === 0,
+    }
+  }, [algorithms.optimization, stats.expense])
 
   const pieColors = ['#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16', '#22c55e', '#06b6d4', '#3b82f6'];
   const pieData = Object.keys(stats.categories).map(cat => ({
@@ -158,24 +184,6 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
     }
     return `Your average daily spend is Rs.${Math.round(avgDailySpend).toLocaleString()}. The moving average line on the graph smooths out daily variations to show your true spending trajectory.`;
   }, [algorithms.trends]);
-
-  const fallbackOptimizerExplainer = useMemo(() => {
-    if (!algorithms.optimization || stats.expense === 0) return "Categorize your expenses so we can spot places where you can save.";
-    const { achievedCuts, suggestions, targetSavings } = algorithms.optimization;
-    
-    if (suggestions.length === 0) return `There is no realistic way to save ${savingsGoal}% from these category totals without very large reductions.`;
-    
-    const topCat = suggestions[0]?.category;
-    const topCut = suggestions[0]?.cutAmount || 0;
-    const isTargetMet = achievedCuts >= targetSavings;
-    
-    if (isTargetMet) {
-      return `You can save Rs.${achievedCuts.toLocaleString()} and reach the Rs.${targetSavings.toLocaleString()} goal, mainly from ${topCat} (Rs.${topCut.toLocaleString()}).`;
-    } else {
-      return `You can realistically save Rs.${achievedCuts.toLocaleString()} of the Rs.${targetSavings.toLocaleString()} goal, mainly from ${topCat} (Rs.${topCut.toLocaleString()}).`;
-    }
-  }, [algorithms.optimization, stats.expense, savingsGoal]);
-  const optimizerExplainer = fallbackOptimizerExplainer
 
   const breakdownExplainer = useMemo(() => {
     if (!stats.expense) return "Categorize your transactions to see your expense breakdown.";
@@ -355,125 +363,202 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
       </div>
 
       {/* Advanced Analytics - Budget Optimizer Row */}
-      <div className="bg-white dark:bg-paper-100 border border-paper-200/60 dark:border-paper-300/50 rounded-2xl p-6 shadow-sm overflow-hidden">
-        <div className="flex flex-col lg:flex-row gap-8">
-          
-          <div className="lg:w-1/3 flex flex-col gap-4">
-            <h4 className="font-bold text-xl text-emerald-900 dark:text-emerald-100 flex items-center gap-2">
-              <span className="p-2 bg-emerald-50 dark:bg-emerald-900/30 rounded-xl text-emerald-600 dark:text-emerald-400">🎯</span>
-              Budget Optimizer
-            </h4>
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-               <label className="text-sm font-semibold text-gray-700 dark:text-gray-300">Savings Goal</label>
-               <div className="relative w-full sm:w-44" ref={goalMenuRef}>
-                 <button
-                   type="button"
-                   onClick={() => setIsGoalMenuOpen(open => !open)}
-                   className={`w-full flex items-center justify-between gap-3 rounded-xl border px-4 py-2.5 text-sm font-bold transition-all ${isGoalMenuOpen
-                     ? 'border-emerald-400 bg-emerald-50 text-emerald-900 shadow-lg shadow-emerald-500/10 ring-4 ring-emerald-500/10 dark:bg-emerald-900/20 dark:text-emerald-100'
-                     : 'border-emerald-200 bg-white text-emerald-800 hover:border-emerald-300 hover:bg-emerald-50/70 dark:border-emerald-800 dark:bg-paper-300 dark:text-emerald-100 dark:hover:bg-paper-400'
-                   }`}
-                   aria-haspopup="listbox"
-                   aria-expanded={isGoalMenuOpen}
-                 >
-                   <span>Save {savingsGoal}%</span>
-                   <svg className={`w-4 h-4 transition-transform ${isGoalMenuOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                   </svg>
-                 </button>
-
-                 {isGoalMenuOpen && (
-                   <div className="absolute left-0 right-0 top-full z-40 mt-2 overflow-hidden rounded-xl border border-emerald-100 bg-white shadow-2xl shadow-emerald-950/10 dark:border-emerald-900 dark:bg-paper-200">
-                     <div className="max-h-64 overflow-y-auto p-1.5 scrollbar-thin" role="listbox">
-                       {SAVINGS_GOAL_OPTIONS.map(v => (
-                         <button
-                           key={v}
-                           type="button"
-                           onClick={() => {
-                             setSavingsGoal(v)
-                             setIsGoalMenuOpen(false)
-                           }}
-                           className={`w-full flex items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-semibold transition-colors ${savingsGoal === v
-                             ? 'bg-emerald-600 text-white shadow-sm'
-                             : 'text-gray-700 hover:bg-emerald-50 hover:text-emerald-800 dark:text-gray-200 dark:hover:bg-paper-300 dark:hover:text-emerald-100'
-                           }`}
-                           role="option"
-                           aria-selected={savingsGoal === v}
-                         >
-                           <span>Save {v}%</span>
-                           {savingsGoal === v && (
-                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                             </svg>
-                           )}
-                         </button>
-                       ))}
-                     </div>
-                   </div>
-                 )}
-               </div>
-            </div>
-            
-            <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-4 text-sm text-gray-700 dark:border-emerald-900/50 dark:bg-emerald-900/10 dark:text-gray-200">
-              <p className="leading-relaxed">
-                {optimizerExplainer}
-              </p>
+      <div className="bg-white dark:bg-paper-100 border border-paper-200/60 dark:border-paper-300/50 rounded-2xl p-5 sm:p-6 shadow-sm overflow-hidden">
+        <div className="flex flex-col xl:flex-row gap-6 xl:gap-8">
+          <div className="xl:w-[38%] flex flex-col gap-4 min-w-0">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <span className="mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400">
+                  <Target size={20} strokeWidth={2.2} />
+                </span>
+                <div>
+                  <h4 className="font-bold text-xl leading-tight text-emerald-950 dark:text-emerald-100">Budget Optimizer</h4>
+                  <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">A what-if plan to lower spending from the categories you can change first.</p>
+                </div>
+              </div>
+              <span className="hidden sm:inline-flex flex-shrink-0 rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-gray-500 dark:bg-paper-300 dark:text-gray-400">Guide</span>
             </div>
 
-            {algorithms.optimization && stats.expense > 0 ? (() => {
-              const { targetSavings, achievedCuts, suggestions } = algorithms.optimization;
-              return (
-                 <div className="mt-2 bg-emerald-50 dark:bg-emerald-900/10 rounded-xl p-5 border border-emerald-100 dark:border-emerald-800/30">
-                    <div className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 mb-2 uppercase tracking-wide">Savings Plan</div>
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-center text-sm">
-                         <span className="text-gray-600 dark:text-gray-400">Target Savings:</span>
-                         <span className="font-bold text-gray-900 dark:text-gray-100">Rs.{targetSavings.toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between items-center text-sm">
-                         <span className="text-gray-600 dark:text-gray-400">Possible Savings:</span>
-                         <span className="font-bold text-emerald-600 dark:text-emerald-400">Rs.{achievedCuts.toLocaleString()}</span>
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-100 bg-emerald-50/50 px-3.5 py-3 dark:border-emerald-900/50 dark:bg-emerald-900/10">
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">Target reduction</label>
+                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Choose how much less to spend</p>
+              </div>
+              <div className="relative w-32 flex-shrink-0" ref={goalMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => setIsGoalMenuOpen(open => !open)}
+                  className={`w-full flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm font-bold transition-all ${isGoalMenuOpen
+                    ? 'border-emerald-400 bg-white text-emerald-900 shadow-lg ring-4 ring-emerald-500/10 dark:bg-paper-300 dark:text-emerald-100'
+                    : 'border-emerald-200 bg-white text-emerald-800 hover:border-emerald-300 hover:bg-emerald-50 dark:border-emerald-800 dark:bg-paper-300 dark:text-emerald-100 dark:hover:bg-paper-400'
+                  }`}
+                  aria-haspopup="listbox"
+                  aria-expanded={isGoalMenuOpen}
+                >
+                  <span>Reduce {savingsGoal}%</span>
+                  <svg className={`h-4 w-4 transition-transform ${isGoalMenuOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+
+                {isGoalMenuOpen && (
+                  <div className="absolute left-0 right-0 top-full z-40 mt-2 overflow-hidden rounded-xl border border-emerald-100 bg-white shadow-2xl shadow-emerald-950/10 dark:border-emerald-900 dark:bg-paper-200">
+                    <div className="max-h-64 overflow-y-auto p-1.5 scrollbar-thin" role="listbox">
+                      {SAVINGS_GOAL_OPTIONS.map(v => (
+                        <button
+                          key={v}
+                          type="button"
+                          onClick={() => {
+                            setSavingsGoal(v)
+                            setIsGoalMenuOpen(false)
+                          }}
+                          className={`w-full flex items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-semibold transition-colors ${savingsGoal === v
+                            ? 'bg-emerald-600 text-white shadow-sm'
+                            : 'text-gray-700 hover:bg-emerald-50 hover:text-emerald-800 dark:text-gray-200 dark:hover:bg-paper-300 dark:hover:text-emerald-100'
+                          }`}
+                          role="option"
+                          aria-selected={savingsGoal === v}
+                        >
+                          <span>Reduce {v}%</span>
+                          {savingsGoal === v && <CheckCircle2 size={15} />}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {optimizerPlan ? (
+              <>
+                <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-4 dark:border-paper-300 dark:bg-paper-200/30">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-[10px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">Goal progress</div>
+                      <div className="mt-1 text-sm text-gray-700 dark:text-gray-200">
+                        <span className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400">{formatRs(optimizerPlan.achieved)}</span>
+                        <span className="text-gray-500 dark:text-gray-400"> of {formatRs(optimizerPlan.target)}</span>
                       </div>
                     </div>
-                    {suggestions.length > 0 ? (
-                       <div className="mt-4 pt-4 border-t border-emerald-200/50 dark:border-emerald-800/50">
-                          <div className="text-xs font-bold text-emerald-800 dark:text-emerald-300 mb-2">Recommended Savings:</div>
-                          <ul className="space-y-2 text-sm max-h-[140px] overflow-y-auto scrollbar-thin pr-2">
-                             {suggestions.map((sug, i) => (
-                                <li key={i} className="flex justify-between items-center py-0.5">
-                                   <span className="capitalize">{sug.category}</span>
-                                   <span className="text-emerald-600 font-semibold">Save Rs.{sug.cutAmount.toLocaleString()}</span>
-                                </li>
-                             ))}
-                          </ul>
-                       </div>
-                    ) : (
-                       <div className="mt-4 text-sm text-emerald-600">No extra savings needed at this level.</div>
-                    )}
-                 </div>
-              )
-            })() : (
-               <div className="text-sm text-gray-500 italic mt-6 bg-gray-50 dark:bg-paper-200/50 p-4 rounded-xl">Add expenses to get optimization suggestions.</div>
+                    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold ${optimizerPlan.targetMet
+                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                      : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                    }`}>
+                      {optimizerPlan.targetMet ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}
+                      {optimizerPlan.targetMet ? 'On target' : 'Partly covered'}
+                    </span>
+                  </div>
+                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-paper-400">
+                    <div className="h-full rounded-full bg-emerald-500 transition-all duration-500" style={{ width: `${optimizerPlan.progress}%` }} />
+                  </div>
+                  <div className="mt-1.5 flex justify-between gap-2 text-[11px] text-gray-500 dark:text-gray-400">
+                    <span>{optimizerPlan.progress}% covered</span>
+                    {optimizerPlan.remaining > 0 ? <span>{formatRs(optimizerPlan.remaining)} still needed</span> : <span>Target reached</span>}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="rounded-lg border border-gray-100 bg-white p-2.5 dark:border-paper-300 dark:bg-paper-200">
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Now</div>
+                    <div className="mt-1 text-sm font-bold text-gray-800 dark:text-gray-100">{formatRs(stats.expense)}</div>
+                  </div>
+                  <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-2.5 dark:border-emerald-900/50 dark:bg-emerald-900/10">
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">Cut</div>
+                    <div className="mt-1 text-sm font-bold text-emerald-700 dark:text-emerald-300">{formatRs(optimizerPlan.achieved)}</div>
+                  </div>
+                  <div className="rounded-lg border border-blue-100 bg-blue-50/60 p-2.5 dark:border-blue-900/50 dark:bg-blue-900/10">
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-400">After plan</div>
+                    <div className="mt-1 text-sm font-bold text-blue-700 dark:text-blue-300">{formatRs(optimizerPlan.afterPlan)}</div>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-2 rounded-lg bg-gray-50 px-3 py-2.5 text-[11px] leading-relaxed text-gray-500 dark:bg-paper-200/50 dark:text-gray-400">
+                  <Info size={14} className="mt-0.5 flex-shrink-0 text-gray-400" />
+                  <span>This is a suggested spending cap, not an automatic change to your transactions.</span>
+                </div>
+
+                <div>
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <div>
+                      <h5 className="text-sm font-bold text-gray-800 dark:text-gray-100">Your next moves</h5>
+                      <p className="text-[11px] text-gray-500 dark:text-gray-400">Start at the top; suggestions prioritize flexible spending.</p>
+                    </div>
+                    <span className="rounded-full bg-gray-100 px-2 py-1 text-[10px] font-bold text-gray-500 dark:bg-paper-300 dark:text-gray-400">{optimizerPlan.suggestions.length} categories</span>
+                  </div>
+
+                  {optimizerPlan.suggestions.length > 0 ? (
+                    <ul className="max-h-[300px] space-y-2 overflow-y-auto pr-1 scrollbar-thin">
+                      {optimizerPlan.suggestions.map((suggestion, index) => {
+                        const current = Number(stats.categories[suggestion.category]) || 0
+                        const cut = Number(suggestion.cutAmount) || 0
+                        const after = Math.max(0, current - cut)
+                        const cutPercent = current > 0 ? Math.round((cut / current) * 100) : 0
+                        const isEssential = suggestion.reason === 'Essential category optimization'
+                        return (
+                          <li key={`${suggestion.category}-${index}`} className="rounded-xl border border-gray-100 bg-white p-3 dark:border-paper-300 dark:bg-paper-200">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex min-w-0 items-center gap-2">
+                                <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-emerald-100 text-[10px] font-bold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">{index + 1}</span>
+                                <span className="truncate text-sm font-semibold text-gray-800 dark:text-gray-100">{formatCategory(suggestion.category)}</span>
+                              </div>
+                              <span className="flex-shrink-0 text-xs font-bold text-emerald-600 dark:text-emerald-400">Save {formatRs(cut)}</span>
+                            </div>
+                            <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-gray-500 dark:text-gray-400">
+                              <span>{formatRs(current)} → {formatRs(after)}</span>
+                              <span>{cutPercent}% lower</span>
+                            </div>
+                            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-paper-400">
+                              <div className="h-full rounded-full bg-emerald-500" style={{ width: `${Math.min(100, cutPercent)}%` }} />
+                            </div>
+                            <div className="mt-1.5 flex items-center gap-1 text-[10px] text-gray-400 dark:text-gray-500">
+                              {isEssential ? <AlertCircle size={12} className="text-amber-500" /> : <TrendingDown size={12} className="text-emerald-500" />}
+                              {isEssential ? 'Essential - trim carefully' : 'Flexible spending - start here'}
+                            </div>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  ) : (
+                    <div className="rounded-xl border border-amber-100 bg-amber-50 p-3 text-sm leading-relaxed text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/10 dark:text-amber-200">
+                      No category can safely cover this goal. Try a smaller reduction or review uncategorized spending.
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="rounded-xl bg-gray-50 p-4 text-sm leading-relaxed text-gray-500 dark:bg-paper-200/50 dark:text-gray-400">Add expenses to get a category-by-category savings plan.</div>
             )}
           </div>
 
-          <div className="lg:w-2/3 min-h-[300px] border border-gray-100 dark:border-paper-300 rounded-xl p-4 bg-gray-50/50 dark:bg-paper-200/20">
-            <h5 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4 text-center">Current vs Recommended Spending</h5>
+          <div className="xl:w-[62%] min-h-[420px] rounded-2xl border border-gray-200 bg-gray-50/50 p-4 sm:p-5 dark:border-paper-300 dark:bg-paper-200/20">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h5 className="text-sm font-bold text-gray-800 dark:text-gray-100">Where the plan changes spending</h5>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Compare what you spend now with the suggested cap after the cuts.</p>
+              </div>
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500"><TrendingDown size={13} /> Lower is better</span>
+            </div>
             {optimizerData.length > 0 ? (
-               <ResponsiveContainer width="100%" height="90%">
-                 <BarChart data={optimizerData} margin={{top: 10, right: 10, left: -20, bottom: 0}}>
-                   <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.2} />
-                   <XAxis dataKey="category" tick={{fontSize: 10}} tickLine={false} axisLine={false} />
-                   <YAxis tick={{fontSize: 10}} tickLine={false} axisLine={false} tickFormatter={v => `Rs.${v/1000}k`} />
-                   <RechartsTooltip content={<CustomTooltip />} cursor={{fill: 'transparent'}} />
-                   <Legend wrapperStyle={{fontSize: 12}} />
-                   <Bar dataKey="Target Spending" stackId="a" fill="#10b981" radius={[0, 0, 4, 4]} />
-                   <Bar dataKey="Projected Savings" stackId="a" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-                 </BarChart>
-               </ResponsiveContainer>
+              <div className="mt-3 h-[400px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart layout="vertical" data={optimizerData} margin={{ top: 8, right: 8, left: 4, bottom: 4 }} barCategoryGap="18%">
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} opacity={0.2} />
+                    <XAxis type="number" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={value => `Rs.${Math.round(value / 1000)}k`} />
+                    <YAxis type="category" dataKey="category" width={112} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={formatCategory} />
+                    <RechartsTooltip content={<CustomTooltip />} cursor={{ fill: 'transparent' }} />
+                    <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
+                    <Bar dataKey="current" name="Current spend" fill="#94a3b8" radius={[0, 4, 4, 0]} barSize={10} />
+                    <Bar dataKey="afterPlan" name="After plan" fill="#10b981" radius={[0, 4, 4, 0]} barSize={10} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             ) : (
-               <div className="h-full flex items-center justify-center text-gray-400 text-sm">No category data available.</div>
+              <div className="flex h-[400px] items-center justify-center text-sm text-gray-400">Add categorized expenses to compare spending.</div>
             )}
+            <div className="mt-2 flex items-start gap-2 rounded-lg border border-gray-100 bg-white/70 px-3 py-2 text-[11px] leading-relaxed text-gray-500 dark:border-paper-300 dark:bg-paper-200/60 dark:text-gray-400">
+              <Info size={14} className="mt-0.5 flex-shrink-0 text-gray-400" />
+              <span>Gray is your current category total. Green is the amount left after following the suggested cut.</span>
+            </div>
           </div>
         </div>
       </div>
