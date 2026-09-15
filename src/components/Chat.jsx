@@ -935,10 +935,7 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
 
   startVoiceListeningRef.current = startVoiceListening
 
-  const handleImageSelected = async (event) => {
-    const file = event.target.files?.[0]
-    event.target.value = ''
-    setAttachmentMenuOpen(false)
+  const attachImageFile = async (file) => {
     if (!file) return
 
     if (!['image/jpeg', 'image/png'].includes(file.type)) {
@@ -956,6 +953,38 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
     } catch (error) {
       setMessages(prev => [...prev, { type: 'bot', text: error.message || 'Unable to preview that image.' }])
     }
+  }
+
+  const handleImageSelected = async (event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    setAttachmentMenuOpen(false)
+    await attachImageFile(file)
+  }
+
+  const handleImagePaste = async (event) => {
+    const clipboardItems = Array.from(event.clipboardData?.items || [])
+    const imageItem = clipboardItems.find(item => item.kind === 'file' && item.type.startsWith('image/'))
+    if (!imageItem) return
+
+    // An image paste is an attachment action, so do not also insert any text
+    // representation of the clipboard contents into the composer.
+    event.preventDefault()
+    setAttachmentMenuOpen(false)
+
+    const clipboardFile = imageItem.getAsFile()
+    if (!clipboardFile) {
+      setMessages(prev => [...prev, { type: 'bot', text: 'Unable to read the pasted image. Please try the photo picker.' }])
+      return
+    }
+
+    const extension = clipboardFile.type === 'image/jpeg' ? 'jpg' : 'png'
+    const pastedFile = new File(
+      [clipboardFile],
+      `pasted-image-${Date.now()}.${extension}`,
+      { type: clipboardFile.type, lastModified: Date.now() },
+    )
+    await attachImageFile(pastedFile)
   }
 
   useEffect(() => {
@@ -2338,7 +2367,7 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
                         </span>
                         <span>
                           <span className="block text-sm font-semibold text-gray-800 dark:text-gray-100">Add photo</span>
-                          <span className="block text-[11px] text-gray-500 dark:text-gray-400">JPG or PNG · up to 5 MB</span>
+                          <span className="block text-[11px] text-gray-500 dark:text-gray-400">JPG or PNG · up to 5 MB · or paste</span>
                         </span>
                       </button>
                       <button
@@ -2373,6 +2402,7 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
                   ref={inputRef}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
+                  onPaste={handleImagePaste}
                   onFocus={() => updateComposerFocus(true)}
                   onBlur={() => {
                     window.setTimeout(() => {
