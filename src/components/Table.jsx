@@ -1,6 +1,7 @@
 import { useState, useEffect, useImperativeHandle, forwardRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '../supabase'
+import { rememberCategoryChoice } from '../utils/categoryMemory'
 import DateRangePicker, { getDateRange } from './ui/DateRangePicker'
 import DeleteConfirmationModal from './ui/DeleteConfirmationModal'
 
@@ -167,6 +168,7 @@ const Table = forwardRef(({ expenses, onExpenseUpdate, currentGroup, user }, ref
     try {
       const { error } = await supabase.from('expenses').update(itemToEdit).eq('id', itemToEdit.id)
       if (error) throw error
+      rememberCategoryChoice(user?.id, itemToEdit.item, itemToEdit.category)
       setItemToEdit(null)
       fetchExpenses(false)
     } catch (error) {

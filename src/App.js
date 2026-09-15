@@ -13,6 +13,7 @@ import MainLayout from './components/layout/MainLayout'
 import { ThemeProvider } from './context/ThemeContext'
 import { supabase } from './supabase'
 import { initializeMobile, getMobileStyles } from './mobile'
+import { applyRememberedCategories, rememberCategoryChoice } from './utils/categoryMemory'
 import axios from 'axios'
 
 function App() {
@@ -167,12 +168,16 @@ function App() {
 
     try {
       const response = await axios.post(`${window.APP_CONFIG?.API_BASE_URL || ''}/api/expenses/parse`, { text, mode: 'expense' })
-      const { expenses, reply } = response.data
+      const { expenses: parsedExpenses, reply } = response.data
 
-      if (!expenses || expenses.length === 0) {
+      if (!parsedExpenses || parsedExpenses.length === 0) {
         setAddExpenseMessage(reply || 'I could not understand that expense. Include an item and amount.')
         return
       }
+
+      const { transactions: expenses } = applyRememberedCategories(parsedExpenses, {
+        userId: user?.id,
+      })
 
       const needsCategory = expenses.some(exp => {
         const category = String(exp.category || '').toLowerCase()
@@ -201,11 +206,15 @@ function App() {
     setAddExpenseMessage('')
 
     try {
-      await handleExpenseAdded(pendingAddExpenses.map(exp => ({
+      const updatedExpenses = pendingAddExpenses.map(exp => ({
         ...exp,
         category,
         needs_confirmation: false,
-      })))
+      }))
+      await handleExpenseAdded(updatedExpenses)
+      updatedExpenses.forEach(expense => {
+        rememberCategoryChoice(user?.id, expense.item, category)
+      })
       closeAddExpenseModal()
     } catch (error) {
       setAddExpenseMessage('Unable to save right now. Please try again.')
@@ -352,7 +361,7 @@ function App() {
                         </p>
                       ))}
                       <div className="mt-3 flex flex-wrap gap-2">
-                        {['Food', 'Transport', 'Utilities', 'Entertainment', 'Medical', 'Education', 'Shopping', 'Groceries', 'Personal Care', 'Other'].map(category => (
+                        {['Food', 'Transport', 'Utilities', 'Entertainment', 'Medical', 'Education', 'Shopping', 'Groceries', 'Kitchenware', 'Furniture', 'Household Cleaning', 'Personal Care', 'Pet Supplies', 'Software Services', 'Other'].map(category => (
                           <button
                             key={category}
                             type="button"

@@ -3,6 +3,8 @@ import axios from 'axios'
 import { Send, MessageCircle, Receipt, Wallet, ArrowLeftRight, Trash2, ChevronLeft, ChevronRight, Plus, Image as ImageIcon, AudioLines, Square, X, Mic, Play } from 'lucide-react'
 import { supabase } from '../supabase'
 import { API_BASE_URL } from '../config/api'
+import { applyRememberedCategories, rememberCategoryChoice } from '../utils/categoryMemory'
+import { buildRememberedExpenseReply } from '../utils/transactionReplies'
 import DeleteConfirmationModal from './ui/DeleteConfirmationModal'
 
 const getApiBaseUrl = () => {
@@ -23,7 +25,7 @@ const REVIEW_CATEGORIES = [
   'Food', 'Groceries', 'Transport', 'Utilities', 'Rent', 'Shopping', 'Medical',
   'Entertainment', 'Education', 'Travel', 'Accommodation', 'Electronics',
   'Personal Care', 'Fitness', 'Gifts', 'Finance', 'Maintenance', 'Income', 'Loan',
-  'Household Cleaning', 'Furniture', 'Pet Supplies', 'Software Services', 'Other'
+  'Household Cleaning', 'Kitchenware', 'Furniture', 'Pet Supplies', 'Software Services', 'Other'
 ]
 
 const INPUT_MODE_STORAGE_KEY = 'pfm_input_mode'
@@ -384,12 +386,27 @@ const renderAssistantMessage = (text) => {
 export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGroup, isVisible = true, compact = false, onClearChat, showMessagesArea = true }) {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+
+  // Chat messages are saved only in this browser (localStorage).
+  // Financial records are saved separately in Supabase.
   const [messages, setMessages] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem('pfm_messages') || '[]')
+      const storedMessages = JSON.parse(localStorage.getItem('pfm_messages') || '[]')
+      return Array.isArray(storedMessages)
+        ? storedMessages.map((message, index) => (
+            message?.type === 'confirmation' && !message.id
+              ? { ...message, id: `restored-confirmation-${index}` }
+              : message
+          ))
+        : []
     } catch { return [] }
   })
+  // A local copy of the user's Supabase records. Chat mode sends these records
+  // to the backend so it can answer questions using the user's real data.
   const [expensesData, setExpensesData] = useState([])
+
+  // Parsed transactions wait here when the user must confirm a category,
+  // loan type, or transactions found in an uploaded image/audio file.
   const [pendingTransactions, setPendingTransactions] = useState(null)
   const [pendingIntent, setPendingIntent] = useState(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -424,6 +441,7 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
   const isRecordingRef = useRef(false)
   const recordingPurposeRef = useRef('attachment')
   const processingAbortRef = useRef(null)
+  const confirmationInFlightRef = useRef(new Set())
   const confirmedIntentRef = useRef(null)
   const messageSequenceRef = useRef(0)
   const handleSubmitRef = useRef(null)
@@ -457,6 +475,8 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
   const [animating, setAnimating] = useState(false)
   const touchStartX = useRef(null)
 
+  // The four modes are: chat, expense, income, and loan.
+  // The last selected mode is restored from localStorage.
   const [inputMode, setInputMode] = useState(getSavedInputMode)
   const [autoIntentEnabled, setAutoIntentEnabled] = useState(getSavedAutoIntent)
   const [isComposerFocused, setIsComposerFocused] = useState(false)
@@ -560,6 +580,9 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
 
   useEffect(() => {
     messagesRef.current = messages
+
+    // Do not save temporary image preview URLs because they stop working after
+    // a page reload. Everything else in the conversation is kept locally.
     const persistableMessages = messages.map(message => message.attachment
       ? { ...message, attachment: { ...message.attachment, previewUrl: undefined } }
       : message)
@@ -568,6 +591,8 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
 
   const fetchExpensesData = useCallback(async () => {
     try {
+      // All expense, income, and loan records live in the same Supabase table.
+      // Personal mode reads this user's rows; group mode reads the group's rows.
       let query = supabase.from('expenses').select('*')
       if (currentGroup) {
         query = query.eq('group_id', currentGroup.id)
@@ -1085,6 +1110,12 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
 
   const handleSubmit = async (e, submissionOverride = null) => {
     e.preventDefault()
+
+    // This is the main message flow:
+    // 1. Read text/image/audio input.
+    // 2. Detect whether it is chat, expense, income, or loan.
+    // 3. Ask the backend to answer or parse it.
+    // 4. Save parsed transactions through onExpenseAdded when ready.
     const requestedText = submissionOverride?.text !== undefined
       ? String(submissionOverride.text || '').trim()
       : input.trim()
@@ -1098,7 +1129,8 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
       : requestedText
     if (!originalText && !requestedAttachment) return
     const submittedAttachment = requestedAttachment
-    const messageId = `message-${Date.now()}-${messageSequenceRef.current += 1}`
+    const existingMessageId = submissionOverride?.existingMessageId || null
+    const messageId = existingMessageId || `message-${Date.now()}-${messageSequenceRef.current += 1}`
     const controller = new AbortController()
     const messageAttachment = submittedAttachment
       ? {
@@ -1113,9 +1145,11 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
     let mediaTransactions = []
     let mediaSummary = ''
     let mediaIntent = null
-    const confirmedIntent = confirmedIntentRef.current?.text === originalText
-      ? confirmedIntentRef.current.mode
-      : null
+    const confirmedIntent = submissionOverride?.confirmedMode || (
+      confirmedIntentRef.current?.text === originalText
+        ? confirmedIntentRef.current.mode
+        : null
+    )
     if (confirmedIntent) confirmedIntentRef.current = null
     let resolvedMode = confirmedIntent || inputMode
 
@@ -1124,14 +1158,22 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
     setAttachmentMenuOpen(false)
     setInput('')
     replaceAttachment(null)
-    setMessages(prev => [...prev, {
-      id: messageId,
-      type: 'user',
-      text: originalText,
-      mode: inputMode,
-      attachment: messageAttachment,
-      fromAudio: Boolean(submissionOverride?.voice || submittedAttachment?.type === 'audio'),
-    }])
+    if (existingMessageId) {
+      setMessages(prev => prev.map(message => (
+        message.id === existingMessageId
+          ? { ...message, mode: resolvedMode }
+          : message
+      )))
+    } else {
+      setMessages(prev => [...prev, {
+        id: messageId,
+        type: 'user',
+        text: originalText,
+        mode: inputMode,
+        attachment: messageAttachment,
+        fromAudio: Boolean(submissionOverride?.voice || submittedAttachment?.type === 'audio'),
+      }])
+    }
 
     const finishProcessing = () => {
       if (processingAbortRef.current === controller) {
@@ -1148,6 +1190,8 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
 
     if (submittedAttachment) {
       try {
+        // Images and voice recordings are converted to base64 and sent to the
+        // backend. The backend returns readable text and possible transactions.
         const encodedMedia = await fileToBase64(submittedAttachment.file)
         const mediaResponse = await axios.post(`${getApiBaseUrl()}/api/expenses/media/understand`, {
           media_type: submittedAttachment.type,
@@ -1213,6 +1257,8 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
         resolvedMode = mediaIntent
       } else {
         try {
+          // Intent detection only chooses the correct mode. It does not save
+          // anything. Unclear input creates confirmation buttons for the user.
           const response = await axios.post(`${getApiBaseUrl()}/api/expenses/intent`, {
             text: userMsg,
             current_mode: inputMode,
@@ -1221,10 +1267,14 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
             const candidates = Array.isArray(response.data?.candidates)
               ? response.data.candidates.filter(candidate => ['expense', 'income', 'loan'].includes(candidate))
               : ['expense', 'income', 'loan']
-            setPendingIntent({ text: userMsg, candidates })
+            const confirmationId = `intent-confirmation-${messageId}`
+            setPendingIntent({ text: userMsg, candidates, messageId, confirmationId })
             setMessages(prev => [...prev, {
+              id: confirmationId,
               type: 'confirmation',
               confirmMode: 'intent',
+              targetMessageId: messageId,
+              candidates,
               text: response.data?.reason || 'I’m not certain what kind of transaction this is. Please confirm before I save it.',
             }])
             finishProcessing()
@@ -1269,7 +1319,9 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
 
     try {
       if (resolvedMode === 'chat') {
-        // Chat mode — AI financial Q&A
+        // CHAT MODE: Ask a question about existing financial records.
+        // We send the records plus the last eight messages so follow-up
+        // questions such as "what about last month?" have enough context.
         const { data: { user: freshUser } } = await supabase.auth.getUser()
         const currentUser = freshUser || user
         const userName = getFirstName(currentUser?.user_metadata?.name || currentUser?.email, 'User')
@@ -1290,9 +1342,11 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
         }
 
         if (currentGroup) {
+          // In group mode the assistant answers from the group's transactions.
           payload.group_name = currentGroup.name
           payload.group_expenses_data = expensesData
         } else {
+          // Otherwise it answers from the signed-in user's personal records.
           payload.expenses_data = expensesData
         }
 
@@ -1307,12 +1361,16 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
             { signal: controller.signal },
           )
         }
+        // The backend calculates/retrieves the financial facts and returns a
+        // ready-to-display natural-language answer in `reply`.
         setMessages(prev => [...prev, { type: 'bot', text: response.data.reply }])
 
       } else if (resolvedMode === 'expense') {
-        // Expense mode — structured image records bypass prose reparsing.
+        // EXPENSE MODE: Convert text such as "lunch 250" into structured rows.
+        // Structured image records can skip this second parsing request.
         let expenses = mediaTransactions.filter(transaction => transaction.transaction_type === 'expense')
         let reply = mediaSummary
+        let rememberedCategories = []
         if (expenses.length === 0) {
           const response = await axios.post(`${getApiBaseUrl()}/api/expenses/parse`, { text: userMsg, mode: 'expense' }, { signal: controller.signal })
           expenses = response.data.expenses || []
@@ -1324,8 +1382,10 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
             const reviewSummary = submittedAttachment.type === 'image' && reply
               ? `${reply} Please review before saving.`
               : buildMediaReviewSummary(submittedAttachment.type, expenses)
-            setPendingTransactions({ expenses, forceMode: 'media', mediaType: submittedAttachment.type, summary: reviewSummary })
+            const confirmationId = `media-confirmation-${messageId}`
+            setPendingTransactions({ confirmationId, expenses, forceMode: 'media', mediaType: submittedAttachment.type, summary: reviewSummary })
             setMessages(prev => [...prev, {
+              id: confirmationId,
               type: 'confirmation',
               text: reviewSummary,
               expenses,
@@ -1334,26 +1394,39 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
             return
           }
 
+          const memoryResult = applyRememberedCategories(expenses, {
+            userId: user?.id,
+            transactionHistory: expensesData,
+          })
+          expenses = memoryResult.transactions
+          rememberedCategories = memoryResult.applied
           const hasAmbiguous = expenses.some(exp => exp.needs_confirmation || (!exp.ai_classified && exp.category === 'Other'))
 
           if (hasAmbiguous) {
-            setPendingTransactions({ expenses, forceMode: 'expense' })
+            // Do not save an uncertain category. Let the user choose first.
+            const confirmationId = `expense-confirmation-${messageId}`
+            setPendingTransactions({ confirmationId, expenses, forceMode: 'expense' })
             setMessages(prev => [...prev, {
+              id: confirmationId,
               type: 'confirmation',
               text: reply || 'Choose a category for this expense:',
               expenses: expenses,
               confirmMode: 'expense'
             }])
           } else {
+            // Chat.jsx does not write to Supabase directly. This callback goes
+            // to App.js, where the rows are inserted into the `expenses` table.
             await onExpenseAdded(expenses)
-            setMessages(prev => [...prev, { type: 'bot', text: reply || 'Saved expense.' }])
+            const rememberedReply = buildRememberedExpenseReply(expenses, rememberedCategories)
+            setMessages(prev => [...prev, { type: 'bot', text: rememberedReply || reply || 'Saved expense.' }])
           }
         } else {
           setMessages(prev => [...prev, { type: 'bot', text: reply || 'I could not understand that expense. Include an item and amount.' }])
         }
 
       } else if (resolvedMode === 'income') {
-        // Income mode — use structured visual extraction when available.
+        // INCOME MODE: Income uses the same Supabase `expenses` table, but is
+        // identified by category `Income` and stored as a negative amount.
         let expenses = mediaTransactions.filter(transaction => transaction.transaction_type === 'income')
         let reply = mediaSummary
         if (expenses.length === 0) {
@@ -1373,8 +1446,10 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
             const reviewSummary = submittedAttachment.type === 'image' && reply
               ? `${reply} Please review before saving.`
               : buildMediaReviewSummary(submittedAttachment.type, incomeExpenses)
-            setPendingTransactions({ expenses: incomeExpenses, forceMode: 'media', mediaType: submittedAttachment.type, summary: reviewSummary })
+            const confirmationId = `media-confirmation-${messageId}`
+            setPendingTransactions({ confirmationId, expenses: incomeExpenses, forceMode: 'media', mediaType: submittedAttachment.type, summary: reviewSummary })
             setMessages(prev => [...prev, {
+              id: confirmationId,
               type: 'confirmation',
               text: reviewSummary,
               expenses: incomeExpenses,
@@ -1389,7 +1464,9 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
         }
 
       } else if (resolvedMode === 'loan') {
-        // Loan mode — parse and enter loan confirmation flow
+        // LOAN MODE: Loans also use the `expenses` table with category `Loan`.
+        // The amount sign and description distinguish lending, borrowing,
+        // repayment, and receiving money back.
         let expenses = mediaTransactions.filter(transaction => transaction.transaction_type === 'loan')
         let reply = mediaSummary
         if (expenses.length === 0) {
@@ -1419,8 +1496,12 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
           const needsConfirmation = updatedExpenses.some(exp => exp.needs_confirmation)
 
           if (needsConfirmation) {
-            setPendingTransactions({ expenses: updatedExpenses, forceMode: 'loan' })
+            // If the backend cannot safely decide the loan direction, ask the
+            // user to choose before creating a financial record.
+            const confirmationId = `loan-confirmation-${messageId}`
+            setPendingTransactions({ confirmationId, expenses: updatedExpenses, forceMode: 'loan' })
             setMessages(prev => [...prev, {
+              id: confirmationId,
               type: 'confirmation',
               text: reply || (person ? `Transaction with ${person}. What type?` : 'What type of loan transaction?'),
               expenses: updatedExpenses,
@@ -1430,8 +1511,10 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
             const reviewSummary = submittedAttachment.type === 'image' && reply
               ? `${reply} Please review before saving.`
               : buildMediaReviewSummary(submittedAttachment.type, updatedExpenses)
-            setPendingTransactions({ expenses: updatedExpenses, forceMode: 'media', mediaType: submittedAttachment.type, summary: reviewSummary })
+            const confirmationId = `media-confirmation-${messageId}`
+            setPendingTransactions({ confirmationId, expenses: updatedExpenses, forceMode: 'media', mediaType: submittedAttachment.type, summary: reviewSummary })
             setMessages(prev => [...prev, {
+              id: confirmationId,
               type: 'confirmation',
               text: reviewSummary,
               expenses: updatedExpenses,
@@ -1596,46 +1679,101 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
 
   const clearChat = () => {
     setMessages([])
+    setPendingIntent(null)
+    setPendingTransactions(null)
+    confirmedIntentRef.current = null
     localStorage.removeItem('pfm_messages')
   }
 
-  // Handle confirmation - save to chosen category (for expense mode)
-  const handleConfirmSave = async (category) => {
-    if (!pendingTransactions) return
+  const getConfirmationKey = (confirmation) => {
+    if (confirmation?.id) return confirmation.id
+    const signature = (confirmation?.expenses || [])
+      .map(expense => `${expense.item || ''}:${expense.amount || ''}:${expense.paid_by || ''}`)
+      .join('|')
+    return `legacy-${confirmation?.confirmMode || 'confirmation'}-${signature}`
+  }
+
+  const finishConfirmation = (confirmation, resolution) => {
+    const confirmationKey = getConfirmationKey(confirmation)
+    setMessages(prev => prev.map(message => (
+      message === confirmation || getConfirmationKey(message) === confirmationKey
+        ? { ...message, resolved: true, resolution }
+        : message
+    )))
+    setPendingTransactions(current => {
+      if (!current) return current
+      const currentKey = current.confirmationId || current.confirmationKey
+      return currentKey === confirmationKey ? null : current
+    })
+  }
+
+  // Save the transactions embedded in the confirmation that was clicked. This
+  // keeps old cards reliable after a reload and prevents one card from saving a
+  // newer card's in-memory transaction.
+  const handleConfirmSave = async (category, confirmation) => {
+    const confirmationKey = getConfirmationKey(confirmation)
+    const sourceExpenses = confirmation?.expenses || []
+    if (confirmation?.resolved || sourceExpenses.length === 0 || confirmationInFlightRef.current.has(confirmationKey)) return
+    confirmationInFlightRef.current.add(confirmationKey)
 
     try {
-      const updatedExpenses = pendingTransactions.expenses.map(exp => ({
+      const updatedExpenses = sourceExpenses.map(exp => ({
         ...exp,
-        category: category
+        category,
+        needs_confirmation: false,
       }))
 
       await onExpenseAdded(updatedExpenses)
-      setMessages(prev => [...prev, { type: 'bot', text: `✓ Saved to ${category}` }])
-      setPendingTransactions(null)
+      updatedExpenses.forEach(expense => {
+        rememberCategoryChoice(user?.id, expense.item, category)
+      })
+      const learnedItems = [...new Set(updatedExpenses.map(expense => expense.item).filter(Boolean))]
+      const learnedLabel = learnedItems.length === 1 ? learnedItems[0] : `${learnedItems.length} items`
+      finishConfirmation(confirmation, `Saved to ${category}`)
+      setMessages(prev => [...prev, {
+        type: 'bot',
+        text: `✓ Saved to ${category}. I'll remember ${learnedLabel} as ${category}.`,
+      }])
     } catch (error) {
       setMessages(prev => [...prev, { type: 'bot', text: 'Error saving transaction' }])
+    } finally {
+      confirmationInFlightRef.current.delete(confirmationKey)
     }
   }
 
-  const handleMediaTransactionChange = (index, field, value) => {
+  const handleMediaTransactionChange = (confirmation, index, field, value) => {
+    const confirmationKey = getConfirmationKey(confirmation)
     setPendingTransactions(current => {
-      if (!current || current.forceMode !== 'media') return current
+      const currentKey = current?.confirmationId || current?.confirmationKey
+      const source = current?.forceMode === 'media' && currentKey === confirmationKey
+        ? current
+        : {
+            confirmationId: confirmation?.id,
+            confirmationKey,
+            expenses: confirmation?.expenses || [],
+            forceMode: 'media',
+          }
       return {
-        ...current,
-        expenses: current.expenses.map((expense, expenseIndex) => (
+        ...source,
+        expenses: source.expenses.map((expense, expenseIndex) => (
           expenseIndex === index ? { ...expense, [field]: value } : expense
         ))
       }
     })
   }
 
-  const handleConfirmMediaSave = async () => {
-    if (!pendingTransactions?.expenses?.length) return
-    const transactions = pendingTransactions.expenses
+  const handleConfirmMediaSave = async (confirmation) => {
+    const confirmationKey = getConfirmationKey(confirmation)
+    const pendingKey = pendingTransactions?.confirmationId || pendingTransactions?.confirmationKey
+    const transactions = pendingKey === confirmationKey
+      ? pendingTransactions.expenses
+      : (confirmation?.expenses || [])
+    if (confirmation?.resolved || !transactions.length || confirmationInFlightRef.current.has(confirmationKey)) return
     if (transactions.some(transaction => !String(transaction.item || '').trim() || !Number(transaction.amount))) {
       setMessages(prev => [...prev, { type: 'bot', text: 'Each transaction needs a clear item and amount before saving.' }])
       return
     }
+    confirmationInFlightRef.current.add(confirmationKey)
 
     try {
       await onExpenseAdded(transactions.map(transaction => ({
@@ -1644,23 +1782,26 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
         remarks: String(transaction.remarks || transaction.item).trim(),
         needs_confirmation: false,
       })))
+      finishConfirmation(confirmation, `Saved ${transactions.length} reviewed transaction${transactions.length === 1 ? '' : 's'}`)
       setMessages(prev => [...prev, {
         type: 'bot',
         text: `Saved ${transactions.length} reviewed transaction${transactions.length === 1 ? '' : 's'}.`
       }])
-      setPendingTransactions(null)
     } catch (error) {
       setMessages(prev => [...prev, { type: 'bot', text: 'Unable to save the reviewed transactions.' }])
+    } finally {
+      confirmationInFlightRef.current.delete(confirmationKey)
     }
   }
 
   // Handle confirmation with specific type (for loan transactions)
-  const handleConfirmSaveWithType = async (category, itemType, amount) => {
-    if (!pendingTransactions) return
+  const handleConfirmSaveWithType = async (confirmation, category, itemType, amount) => {
+    const confirmationKey = getConfirmationKey(confirmation)
+    const exp = confirmation?.expenses?.[0]
+    if (confirmation?.resolved || !exp || confirmationInFlightRef.current.has(confirmationKey)) return
+    confirmationInFlightRef.current.add(confirmationKey)
 
     try {
-      const exp = pendingTransactions.expenses[0]
-
       let typeLabel, remarks
       if (itemType === 'received from') {
         typeLabel = 'RECEIVED'
@@ -1688,52 +1829,90 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
       }
 
       await onExpenseAdded([updatedExpense])
+      finishConfirmation(confirmation, `Saved as ${typeLabel}${exp.paid_by ? ` (${exp.paid_by})` : ''}`)
       setMessages(prev => [...prev, { type: 'bot', text: `✓ Saved as ${typeLabel}${exp.paid_by ? ` (${exp.paid_by})` : ''}` }])
-      setPendingTransactions(null)
     } catch (error) {
       setMessages(prev => [...prev, { type: 'bot', text: 'Error saving transaction' }])
+    } finally {
+      confirmationInFlightRef.current.delete(confirmationKey)
     }
   }
 
-  const handleCancelPending = () => {
-    setPendingTransactions(null)
-    setPendingIntent(null)
+  const handleCancelPending = (confirmation) => {
+    if (!confirmation || confirmation.resolved) return
+    const confirmationKey = getConfirmationKey(confirmation)
+    setPendingTransactions(current => {
+      if (!current) return current
+      const currentKey = current.confirmationId || current.confirmationKey
+      return currentKey === confirmationKey ? null : current
+    })
+    setPendingIntent(current => (
+      confirmation.confirmMode === 'intent' && current?.confirmationId === confirmation.id
+        ? null
+        : current
+    ))
+    finishConfirmation(confirmation, 'Cancelled — nothing was saved')
     setMessages(prev => [...prev, { type: 'bot', text: 'No problem—I did not save anything.' }])
   }
 
-  const handleIntentChoice = (mode) => {
-    if (!pendingIntent) return
+  const handleIntentChoice = (mode, confirmation) => {
+    const confirmationKey = getConfirmationKey(confirmation)
+    if (confirmation?.resolved || confirmationInFlightRef.current.has(confirmationKey)) return
+    const targetMessage = messagesRef.current.find(message => message.id === confirmation.targetMessageId)
+    const text = pendingIntent?.messageId === confirmation.targetMessageId
+      ? pendingIntent.text
+      : targetMessage?.text
+    if (!text || !confirmation.targetMessageId) return
+    confirmationInFlightRef.current.add(confirmationKey)
     setInputMode(mode)
-    setInput(pendingIntent.text)
-    confirmedIntentRef.current = { text: pendingIntent.text, mode }
-    setPendingIntent(null)
-    setMessages(prev => [...prev, {
-      type: 'bot',
-      text: `Got it—I've selected ${mode}. Review the entry, then press send to save it.`,
-    }])
-    window.setTimeout(() => inputRef.current?.focus(), 0)
+    setPendingIntent(current => current?.messageId === confirmation.targetMessageId ? null : current)
+    setMessages(prev => prev.filter(message => message !== confirmation && message.id !== confirmation.id))
+    window.setTimeout(() => {
+      handleSubmitRef.current?.(
+        { preventDefault: () => {} },
+        {
+          text,
+          confirmedMode: mode,
+          existingMessageId: confirmation.targetMessageId,
+        },
+      )
+      confirmationInFlightRef.current.delete(confirmationKey)
+    }, 0)
   }
 
   // Render confirmation buttons based on mode
   const renderConfirmation = (msg) => {
+    if (msg.resolved) {
+      return <p className="mt-3 text-xs font-semibold text-gray-600 dark:text-gray-300">{msg.resolution || 'This confirmation has been resolved.'}</p>
+    }
+
     if (msg.confirmMode === 'intent') {
       const labels = {
         expense: 'This was an expense',
         income: 'This was income or a gift',
         loan: 'This was a loan or repayment',
       }
-      const candidates = pendingIntent?.candidates || ['expense', 'income', 'loan']
+      const isActiveConfirmation = Boolean(
+        msg.targetMessageId && (
+          pendingIntent?.messageId === msg.targetMessageId
+          || messagesRef.current.some(message => message.id === msg.targetMessageId && message.type === 'user')
+        )
+      )
+      const candidates = msg.candidates || ['expense', 'income', 'loan']
+      if (!isActiveConfirmation) {
+        return <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">This confirmation is no longer active.</p>
+      }
       return (
         <div className="flex flex-col gap-2 mt-3">
           <p className="text-xs text-gray-600 dark:text-gray-300">I won’t save anything until you choose.</p>
           <div className="flex flex-wrap gap-2">
             {candidates.map(mode => (
-              <button key={mode} type="button" onClick={() => handleIntentChoice(mode)} className="px-3 py-2 text-xs font-semibold rounded-xl bg-white dark:bg-paper-300 text-gray-800 dark:text-gray-100 border border-amber-200 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors">
+              <button key={mode} type="button" onClick={() => handleIntentChoice(mode, msg)} className="px-3 py-2 text-xs font-semibold rounded-xl bg-white dark:bg-paper-300 text-gray-800 dark:text-gray-100 border border-amber-200 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors">
                 {labels[mode]}
               </button>
             ))}
           </div>
-          <button type="button" onClick={handleCancelPending} className="px-3 py-1.5 text-xs font-medium bg-gray-100 dark:bg-paper-300 text-gray-600 dark:text-gray-300 rounded-full hover:bg-gray-200 dark:hover:bg-paper-400 transition-colors self-start">
+          <button type="button" onClick={() => handleCancelPending(msg)} className="px-3 py-1.5 text-xs font-medium bg-gray-100 dark:bg-paper-300 text-gray-600 dark:text-gray-300 rounded-full hover:bg-gray-200 dark:hover:bg-paper-400 transition-colors self-start">
             Cancel
           </button>
         </div>
@@ -1741,7 +1920,9 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
     }
 
     if (msg.confirmMode === 'media') {
-      const reviewTransactions = pendingTransactions?.forceMode === 'media'
+      const confirmationKey = getConfirmationKey(msg)
+      const pendingKey = pendingTransactions?.confirmationId || pendingTransactions?.confirmationKey
+      const reviewTransactions = pendingTransactions?.forceMode === 'media' && pendingKey === confirmationKey
         ? pendingTransactions.expenses
         : (msg.expenses || [])
 
@@ -1754,7 +1935,7 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
                   <div className="flex items-center justify-between gap-3">
                     <input
                       value={transaction.item || ''}
-                      onChange={(event) => handleMediaTransactionChange(index, 'item', event.target.value)}
+                      onChange={(event) => handleMediaTransactionChange(msg, index, 'item', event.target.value)}
                       aria-label={`Item ${index + 1}`}
                       className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-gray-800 dark:text-gray-100 outline-none border-b border-transparent focus:border-amber-400"
                     />
@@ -1762,7 +1943,7 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
                   </div>
                   <input
                     value={transaction.remarks || ''}
-                    onChange={(event) => handleMediaTransactionChange(index, 'remarks', event.target.value)}
+                    onChange={(event) => handleMediaTransactionChange(msg, index, 'remarks', event.target.value)}
                     aria-label={`Remarks ${index + 1}`}
                     placeholder="Optional remarks"
                     className="w-full bg-transparent text-xs text-gray-600 dark:text-gray-300 outline-none border-b border-transparent focus:border-amber-400"
@@ -1770,7 +1951,7 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
                 </div>
                 <select
                   value={transaction.category || 'Other'}
-                  onChange={(event) => handleMediaTransactionChange(index, 'category', event.target.value)}
+                  onChange={(event) => handleMediaTransactionChange(msg, index, 'category', event.target.value)}
                   aria-label={`Category ${index + 1}`}
                   className="w-full px-2.5 py-2 text-xs font-medium rounded-lg border border-gray-200 dark:border-paper-400 bg-white dark:bg-paper-300 text-gray-700 dark:text-gray-100 outline-none"
                 >
@@ -1782,14 +1963,14 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={handleConfirmMediaSave}
+              onClick={() => handleConfirmMediaSave(msg)}
               className="px-4 py-2 text-xs font-semibold rounded-xl bg-black dark:bg-white text-white dark:text-black hover:opacity-90 transition-opacity"
             >
               Save reviewed {reviewTransactions.length === 1 ? 'transaction' : 'transactions'}
             </button>
             <button
               type="button"
-              onClick={handleCancelPending}
+              onClick={() => handleCancelPending(msg)}
               className="px-4 py-2 text-xs font-medium rounded-xl bg-gray-100 dark:bg-paper-300 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-paper-400 transition-colors"
             >
               Cancel
@@ -1812,20 +1993,20 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
 
       if (isGaveOrTo && !isFrom) {
         buttons = [
-          { label: `I lent to ${person || '?'}`, tag: 'LENT', onClick: () => handleConfirmSaveWithType('Loan', 'lent to', Math.abs(exp.amount)), bg: 'bg-green-100 text-green-700 hover:bg-green-200' },
-          { label: `I paid back ${person || '?'}`, tag: 'PAID', onClick: () => handleConfirmSaveWithType('Loan', 'paid to', Math.abs(exp.amount)), bg: 'bg-purple-100 text-purple-700 hover:bg-purple-200' },
+          { label: `I lent to ${person || '?'}`, tag: 'LENT', onClick: () => handleConfirmSaveWithType(msg, 'Loan', 'lent to', Math.abs(exp.amount)), bg: 'bg-green-100 text-green-700 hover:bg-green-200' },
+          { label: `I paid back ${person || '?'}`, tag: 'PAID', onClick: () => handleConfirmSaveWithType(msg, 'Loan', 'paid to', Math.abs(exp.amount)), bg: 'bg-purple-100 text-purple-700 hover:bg-purple-200' },
         ]
       } else if (isFrom) {
         buttons = [
-          { label: `${person || '?'} paid back`, tag: 'RECEIVED', onClick: () => handleConfirmSaveWithType('Loan', 'received from', -Math.abs(exp.amount)), bg: 'bg-blue-100 text-blue-700 hover:bg-blue-200' },
-          { label: `I borrowed from ${person || '?'}`, tag: 'BORROWED', onClick: () => handleConfirmSaveWithType('Loan', 'borrowed from', -Math.abs(exp.amount)), bg: 'bg-orange-100 text-orange-700 hover:bg-orange-200' },
+          { label: `${person || '?'} paid back`, tag: 'RECEIVED', onClick: () => handleConfirmSaveWithType(msg, 'Loan', 'received from', -Math.abs(exp.amount)), bg: 'bg-blue-100 text-blue-700 hover:bg-blue-200' },
+          { label: `I borrowed from ${person || '?'}`, tag: 'BORROWED', onClick: () => handleConfirmSaveWithType(msg, 'Loan', 'borrowed from', -Math.abs(exp.amount)), bg: 'bg-orange-100 text-orange-700 hover:bg-orange-200' },
         ]
       } else {
         buttons = [
-          { label: `${person || '?'} paid back`, tag: 'RECEIVED', onClick: () => handleConfirmSaveWithType('Loan', 'received from', -Math.abs(exp.amount)), bg: 'bg-blue-100 text-blue-700 hover:bg-blue-200' },
-          { label: `I gave to ${person || '?'}`, tag: 'LENT', onClick: () => handleConfirmSaveWithType('Loan', 'lent to', Math.abs(exp.amount)), bg: 'bg-green-100 text-green-700 hover:bg-green-200' },
-          { label: `I took from ${person || '?'}`, tag: 'BORROWED', onClick: () => handleConfirmSaveWithType('Loan', 'borrowed from', -Math.abs(exp.amount)), bg: 'bg-orange-100 text-orange-700 hover:bg-orange-200' },
-          { label: `I paid back ${person || '?'}`, tag: 'PAID', onClick: () => handleConfirmSaveWithType('Loan', 'paid to', Math.abs(exp.amount)), bg: 'bg-purple-100 text-purple-700 hover:bg-purple-200' },
+          { label: `${person || '?'} paid back`, tag: 'RECEIVED', onClick: () => handleConfirmSaveWithType(msg, 'Loan', 'received from', -Math.abs(exp.amount)), bg: 'bg-blue-100 text-blue-700 hover:bg-blue-200' },
+          { label: `I gave to ${person || '?'}`, tag: 'LENT', onClick: () => handleConfirmSaveWithType(msg, 'Loan', 'lent to', Math.abs(exp.amount)), bg: 'bg-green-100 text-green-700 hover:bg-green-200' },
+          { label: `I took from ${person || '?'}`, tag: 'BORROWED', onClick: () => handleConfirmSaveWithType(msg, 'Loan', 'borrowed from', -Math.abs(exp.amount)), bg: 'bg-orange-100 text-orange-700 hover:bg-orange-200' },
+          { label: `I paid back ${person || '?'}`, tag: 'PAID', onClick: () => handleConfirmSaveWithType(msg, 'Loan', 'paid to', Math.abs(exp.amount)), bg: 'bg-purple-100 text-purple-700 hover:bg-purple-200' },
         ]
       }
 
@@ -1834,12 +2015,12 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
           <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">What type of transaction?</p>
           <div className="flex flex-wrap gap-2">
             {buttons.map((btn, i) => (
-              <button key={i} onClick={btn.onClick} className={`px-3 py-2 text-xs font-medium rounded-xl transition-colors ${btn.bg}`}>
+              <button key={i} type="button" onClick={btn.onClick} className={`px-3 py-2 text-xs font-medium rounded-xl transition-colors ${btn.bg}`}>
                 {btn.label} → <span className="font-bold">{btn.tag}</span>
               </button>
             ))}
           </div>
-          <button onClick={handleCancelPending} className="px-3 py-1.5 text-xs font-medium bg-gray-100 dark:bg-paper-300 text-gray-600 dark:text-gray-300 rounded-full hover:bg-gray-200 dark:hover:bg-paper-400 transition-colors self-start">
+          <button type="button" onClick={() => handleCancelPending(msg)} className="px-3 py-1.5 text-xs font-medium bg-gray-100 dark:bg-paper-300 text-gray-600 dark:text-gray-300 rounded-full hover:bg-gray-200 dark:hover:bg-paper-400 transition-colors self-start">
             Cancel
           </button>
         </div>
@@ -1851,12 +2032,12 @@ export default function Chat({ onExpenseAdded, onTableRefresh, user, currentGrou
       <div className="flex flex-col gap-2 mt-3">
         <div className="flex flex-wrap gap-2">
           {['Food', 'Transport', 'Utilities', 'Entertainment', 'Health', 'Education', 'Shopping', 'Groceries', 'Investment', 'Other'].map(cat => (
-            <button key={cat} onClick={() => handleConfirmSave(cat)} className="px-3 py-1.5 text-xs font-medium bg-gray-100 dark:bg-paper-300 text-gray-700 dark:text-gray-200 rounded-full hover:bg-gray-200 dark:hover:bg-paper-400 transition-colors">
+            <button key={cat} type="button" onClick={() => handleConfirmSave(cat, msg)} className="px-3 py-1.5 text-xs font-medium bg-gray-100 dark:bg-paper-300 text-gray-700 dark:text-gray-200 rounded-full hover:bg-gray-200 dark:hover:bg-paper-400 transition-colors">
               {cat}
             </button>
           ))}
         </div>
-        <button onClick={handleCancelPending} className="px-3 py-1.5 text-xs font-medium bg-gray-100 dark:bg-paper-300 text-gray-600 dark:text-gray-300 rounded-full hover:bg-gray-200 dark:hover:bg-paper-400 transition-colors self-start">
+        <button type="button" onClick={() => handleCancelPending(msg)} className="px-3 py-1.5 text-xs font-medium bg-gray-100 dark:bg-paper-300 text-gray-600 dark:text-gray-300 rounded-full hover:bg-gray-200 dark:hover:bg-paper-400 transition-colors self-start">
           Cancel
         </button>
       </div>

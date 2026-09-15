@@ -1078,7 +1078,7 @@ Provide a helpful response:"""
 
 Item: "{item_description}"
 
-Categories: Food, Transport, Groceries, Shopping, Utilities, Entertainment, Rent, Loan, Income, Medical, Education, Travel, Electronics, Personal Care, Fitness, Other
+Categories: Food, Transport, Groceries, Kitchenware, Shopping, Utilities, Entertainment, Rent, Loan, Income, Medical, Education, Travel, Electronics, Personal Care, Fitness, Other
 
 Return ONLY the category name, nothing else."""
             

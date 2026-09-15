@@ -31,13 +31,22 @@ DEFAULT_TTS_VOICE = "Magpie-Multilingual.EN-US.Aria"
 class ExpenseParser:
     def __init__(self):
         self.categories = {
-            'food': ['biryani', 'pizza', 'restaurant', 'meal', 'lunch', 'dinner', 'food', 'cafe', 'snack', 'tea', 'coffee', 'breakfast', 'momo', 'momos', 'noodles', 'chowmein', 'chowmin', 'chow', 'ramen', 'pasta', 'rice', 'dal', 'curry', 'khana', 'khaana', 'chiya', 'chai', 'dudh', 'milk', 'bhat', 'daal', 'tarkari', 'sabji', 'machha', 'fish', 'chicken', 'mutton', 'buff', 'pork', 'egg', 'anda', 'roti', 'chapati', 'paratha', 'samosa', 'pakoda', 'pakora', 'chaat', 'lassi', 'lasi', 'juice', 'paani', 'water', 'drink', 'beverage', 'ice cream', 'dessert', 'sweets', 'mithai', 'masala', 'paneer', 'veg', 'non-veg', 'burger', 'sandwich', 'roll', 'wrap', 'kathi', 'tikka', 'kebab', 'tandoori', 'thekuwa', 'thekua', 'sel roti', 'yomari', 'chatamari', 'bara', 'wo', 'kwati', 'jeri', 'jerry', 'puri'],
+            'food': ['biryani', 'pizza', 'restaurant', 'meal', 'lunch', 'dinner', 'food', 'cafe', 'snack', 'tea', 'coffee', 'breakfast', 'momo', 'momos', 'noodles', 'chowmein', 'chowmin', 'chow', 'ramen', 'pasta', 'rice', 'dal', 'curry', 'khana', 'khaana', 'chiya', 'chai', 'dudh', 'milk', 'dahi', 'curd', 'yogurt', 'yoghurt', 'bhat', 'daal', 'tarkari', 'sabji', 'machha', 'fish', 'chicken', 'mutton', 'buff', 'pork', 'egg', 'anda', 'roti', 'chapati', 'paratha', 'samosa', 'pakoda', 'pakora', 'chaat', 'lassi', 'lasi', 'juice', 'paani', 'water', 'drink', 'beverage', 'ice cream', 'dessert', 'sweets', 'mithai', 'masala', 'paneer', 'veg', 'non-veg', 'burger', 'sandwich', 'roll', 'wrap', 'kathi', 'tikka', 'kebab', 'tandoori', 'thekuwa', 'thekua', 'sel roti', 'yomari', 'chatamari', 'bara', 'wo', 'kwati', 'jeri', 'jerry', 'puri'],
             'household cleaning': ['window cleaner', 'glass cleaner', 'floor cleaner', 'toilet cleaner', 'cleaning supplies'],
             'transport': ['petrol', 'fuel', 'taxi', 'uber', 'bus', 'train', 'auto', 'rickshaw', 'metro', 'flight', 'travel', 'tempo', 'microbus', 'bike', 'scooter', 'car', 'gaadi', 'diesel', 'parking', 'garage', 'toll', 'service', 'repair', 'ac', 'cooler', 'pump', 'motor'],
             'groceries': ['grocery', 'groceries', 'vegetables', 'fruits', 'market', 'supermarket', 'store', 'milk', 'bread', 'apple', 'garlic', 'potato', 'onion', 'tomato', 'sabji', 'tarkari', 'fruits', 'phal', 'alu', 'pyaj', 'lasun', 'dhaniya', 'hariyo', 'green', 'oil', 'salt', 'sugar', 'spices', 'shampoo', 'soap', 'detergent', 'paste', 'brush', 'oil', 'cream', 'powder', 'tissue', 'paper', 'napkin', 'sanitizer', 'bucket', 'mug', 'mop', 'broom'],
             'shopping': ['clothes', 'shoes', 'shopping', 'shirt', 'dress', 'bag', 'accessories', 'kapada', 'jutta', 'chappals', 'sandals', 'pant', 'jeans', 'tshirt', 'jacket', 'watch', 'belt', 'perfume', 'deo', 'makeup', 'lipstick', 'liner', 'mascara', 'polish', 'remover', 'gift', 'present', 'chair', 'furniture'],
             'utilities': ['electricity', 'water', 'internet', 'phone', 'mobile', 'wifi', 'bill', 'current', 'paani', 'net', 'recharge', 'tv', 'dish', 'gas', 'waste', 'broadband', 'cable', 'wire', 'switch', 'socket', 'bulb', 'light', 'battery', 'inverter', 'topup', 'data', 'plan', 'subscription'],
-            'electronics': ['heater', 'fan', 'fridge', 'microwave', 'oven', 'stove', 'chimney', 'charger', 'remote', 'speaker', 'headphone', 'earphone', 'laptop', 'tablet', 'radio', 'iron', 'geyser', 'blender', 'mixer', 'toaster', 'kettle', 'purifier', 'filter', 'vacuum', 'machine'],
+            'electronics': [
+                'heater', 'fan', 'fridge', 'microwave', 'oven', 'stove', 'chimney',
+                'charger', 'remote', 'speaker', 'headphone', 'earphone', 'laptop',
+                'tablet', 'radio', 'iron', 'geyser', 'blender', 'mixer', 'toaster',
+                'kettle', 'purifier', 'filter', 'vacuum', 'machine',
+                # Computers and peripherals
+                'computer', 'desktop', 'pc', 'mouse', 'keyboard', 'monitor',
+                'screen', 'display', 'webcam', 'printer', 'scanner', 'router',
+                'modem', 'hard drive', 'ssd',
+            ],
             'medical': ['medicine', 'pill', 'tablet', 'syrup', 'drop', 'injection', 'bandage', 'plaster', 'test', 'scan', 'xray', 'doctor', 'nurse', 'fees', 'mask', 'glove', 'hospital', 'clinic', 'pharmacy', 'medical', 'health'],
             'entertainment': ['movie', 'game', 'party', 'cinema', 'show', 'concert', 'film', 'picture', 'khel', 'outing', 'club', 'pub', 'netflix', 'spotify'],
             'accommodation': ['hotel', 'stay', 'booking', 'resort', 'lodge', 'guest house', 'airbnb'],
@@ -73,6 +82,9 @@ class ExpenseParser:
             'charger', 'remote', 'speaker', 'headphone', 'earphone', 'laptop', 'mobile',
             'phone', 'tablet', 'tv', 'radio', 'iron', 'geyser', 'pump', 'motor', 'machine',
             'blender', 'mixer', 'toaster', 'kettle', 'purifier', 'filter', 'vacuum', 'cleaner',
+            'computer', 'desktop', 'pc', 'mouse', 'keyboard', 'monitor', 'screen', 'display',
+            'webcam', 'printer', 'scanner', 'router', 'modem', 'ssd',
+            'website', 'hosting', 'domain', 'software', 'cloud', 'saas',
             # Household & Containers
             'mop', 'broom', 'bucket', 'mug', 'tap', 'sink', 'basin', 'shower', 'tub', 'towel',
             'jar', 'box', 'bag', 'case', 'container', 'tin', 'tray', 'plate', 'bowl', 'cup', 'glass',
@@ -217,6 +229,64 @@ class ExpenseParser:
                 }
         
         # ===== RECEIVED PATTERNS (Person is paying back loan they borrowed from me) =====
+
+        # Natural shorthand: "Salman returned 5000", "Salman returned me
+        # 5000", or "Salman paid me back 5000". The named person is returning
+        # money to the user, so this reduces the amount they owe.
+        person_returned_pattern = (
+            r"^([a-zA-Z][a-zA-Z.'-]*)\s+"
+            r"(?:(?:paid\s+(?:me\s+)?back)|returned)"
+            r"(?:\s+(?:me|my|the))?(?:\s+(?:loan|money|amount))?\s+"
+            r"(\d+)(?:\s+to\s+me)?$"
+        )
+        person_returned_match = re.match(person_returned_pattern, text, re.IGNORECASE)
+        if person_returned_match:
+            person, amount = person_returned_match.groups()
+            if self._is_likely_person(person):
+                return {
+                    'amount': -int(amount),
+                    'item': 'loan received back',
+                    'category': 'Loan',
+                    'remarks': f"{person.title()} paid back their loan",
+                    'paid_by': person.title(),
+                    'needs_confirmation': False,
+                }
+
+        # The opposite direction: "I returned Salman 5000" or
+        # "returned 5000 to Salman" means the user repaid Salman.
+        user_returned_person_pattern = (
+            r"^(?:i\s+)?(?:returned|paid\s+back)\s+"
+            r"([a-zA-Z][a-zA-Z.'-]*)\s+(\d+)$"
+        )
+        user_returned_person_match = re.match(user_returned_person_pattern, text, re.IGNORECASE)
+        if user_returned_person_match:
+            person, amount = user_returned_person_match.groups()
+            if self._is_likely_person(person):
+                return {
+                    'amount': int(amount),
+                    'item': 'loan repayment',
+                    'category': 'Loan',
+                    'remarks': f"Paid back loan to {person.title()}",
+                    'paid_by': person.title(),
+                    'needs_confirmation': False,
+                }
+
+        user_returned_amount_pattern = (
+            r"^(?:i\s+)?(?:returned|paid\s+back)\s+(\d+)\s+to\s+"
+            r"([a-zA-Z][a-zA-Z.'-]*)$"
+        )
+        user_returned_amount_match = re.match(user_returned_amount_pattern, text, re.IGNORECASE)
+        if user_returned_amount_match:
+            amount, person = user_returned_amount_match.groups()
+            if self._is_likely_person(person):
+                return {
+                    'amount': int(amount),
+                    'item': 'loan repayment',
+                    'category': 'Loan',
+                    'remarks': f"Paid back loan to {person.title()}",
+                    'paid_by': person.title(),
+                    'needs_confirmation': False,
+                }
         
         # Pattern: "paid to person his/her loan amount" - Person paid back their loan
         # Example: "paid to hari his loan 500" = Hari returned Rs.500 he had borrowed from me
@@ -1282,7 +1352,7 @@ class ExpenseParser:
         return any(self._contains_category_keyword(description, keyword) for keyword in keywords)
 
     def _categorize(self, description):
-        description_lower = description.lower()
+        description_lower = re.sub(r'\s+', ' ', str(description or '').lower()).strip()
 
         # Action/context words describe why money was spent and should outrank
         # a noun that happens to belong to another category. For example,
@@ -1292,6 +1362,71 @@ class ExpenseParser:
             ['maintenance', 'maintain', 'maintance', 'repair', 'fix', 'servicing', 'cleaning', 'paint', 'painting'],
         ):
             return 'Maintenance'
+
+        # Specific multi-word meanings must beat generic words such as "food",
+        # "subscription", or "chair" that appear in older broad categories.
+        if self._contains_any_category_keyword(description_lower, [
+            'dog food', 'cat food', 'pet food', 'pet toy', 'pet supplies',
+            'dog collar', 'cat litter', 'bird seed',
+        ]):
+            return 'Pet Supplies'
+
+        if self._contains_any_category_keyword(description_lower, [
+            'website hosting', 'web hosting', 'domain renewal', 'domain name',
+            'cloud hosting', 'cloud storage', 'software license', 'saas',
+        ]):
+            return 'Software Services'
+
+        if self._contains_any_category_keyword(description_lower, [
+            'chair', 'table', 'desk', 'sofa', 'couch', 'bed', 'wardrobe',
+            'cupboard', 'cabinet', 'bookshelf', 'shelf', 'mattress', 'furniture',
+        ]):
+            return 'Furniture'
+
+        # Specific appliance phrases must be checked before general food words.
+        # For example, "rice" must not make "rice cooker" a Food item.
+        if self._contains_any_category_keyword(description_lower, [
+            'rice cooker', 'electric cooker', 'induction cooker', 'air fryer',
+            'coffee maker', 'coffee machine', 'food processor', 'electric kettle',
+            'sandwich maker', 'dishwasher',
+        ]):
+            return 'Electronics'
+
+        # Recognize unambiguous kitchen tools and standalone crockery. Keep the
+        # standalone-object pattern narrow so "2 plates momo" remains Food.
+        if self._contains_any_category_keyword(description_lower, [
+            'kitchenware', 'cookware', 'crockery', 'cutlery', 'utensil', 'utensils',
+            'spoon', 'spoons', 'fork', 'forks', 'knife', 'knives', 'saucepan',
+            'frying pan', 'cooking pot', 'pressure cooker', 'chopping board',
+            'dinner set', 'plate set', 'glass set',
+        ]) or re.fullmatch(
+            r'(?:(?:dinner|ceramic|steel|plastic|drinking|water|tea|coffee)\s+)?'
+            r'(?:plate|plates|glass|glasses|cup|cups|bowl|bowls|mug|mugs)'
+            r'(?:\s+set)?',
+            description_lower,
+        ):
+            return 'Kitchenware'
+
+        if re.fullmatch(
+            r'(?:(?:water|drinking|steel|plastic|glass|thermos)\s+)?'
+            r'(?:bottle|bottles|flask|flasks|jar|jars)(?:\s+set)?',
+            description_lower,
+        ):
+            return 'Kitchenware'
+
+        if self._contains_any_category_keyword(description_lower, [
+            'detergent', 'dish soap', 'dishwashing liquid', 'laundry powder',
+            'broom', 'mop', 'toilet cleaner', 'floor cleaner', 'glass cleaner',
+            'cleaning supplies',
+        ]):
+            return 'Household Cleaning'
+
+        if self._contains_any_category_keyword(description_lower, [
+            'shampoo', 'conditioner', 'toothpaste', 'toothbrush', 'body wash',
+            'face wash', 'skincare', 'moisturizer', 'sunscreen', 'deodorant',
+            'perfume', 'comb', 'razor', 'sanitary pad',
+        ]) or description_lower == 'brush':
+            return 'Personal Care'
         
         # Check existing categories first
         for category, keywords in self.categories.items():
@@ -1371,6 +1506,20 @@ class ExpenseParser:
         return '\n'.join(reply_parts)
 
 class NLPService:
+    # A number immediately followed by one of these words describes the item;
+    # it is not a transaction amount (for example, ``2ltr petrol 400``).
+    QUANTITY_UNITS = (
+        "kg", "kgs", "kilogram", "kilograms", "g", "gm", "gms", "gram", "grams",
+        "l", "lt", "ltr", "ltrs", "liter", "liters", "litre", "litres", "ml",
+        "milliliter", "milliliters", "millilitre", "millilitres", "dozen", "dozens",
+        "pc", "pcs", "piece", "pieces", "unit", "units", "pack", "packs", "packet",
+        "packets", "bottle", "bottles", "can", "cans", "box", "boxes", "plate",
+        "plates", "cup", "cups", "serving", "servings", "month", "months", "year",
+        "years", "day", "days", "hour", "hours", "km", "kms", "meter", "meters",
+        "person", "persons", "people", "peoples", "pax", "guest", "guests", "adult",
+        "adults", "child", "children", "member", "members", "seat", "seats",
+    )
+
     def __init__(self):
         self.nim_available = False
         self.nim_client = None
@@ -1414,9 +1563,12 @@ class NLPService:
             except Exception as e:
                 print(f"ERROR: NVIDIA NIM setup failed: {e}")
 
-    def _rule_based_intent(self, text: str) -> dict:
+    def _rule_based_intent(self, text: str, current_mode: str = "chat") -> dict:
         """Classify clear questions and transaction statements without a model call."""
         normalized = re.sub(r"\s+", " ", str(text or "").strip().lower())
+        contextual_mode = str(current_mode or "chat").strip().lower()
+        if contextual_mode not in {"chat", "expense", "income", "loan"}:
+            contextual_mode = "chat"
         if not normalized:
             return {"intent": "chat", "confidence": 1.0, "reason": "empty input", "source": "rules"}
 
@@ -1450,7 +1602,7 @@ class NLPService:
             return {"intent": "chat", "confidence": 0.99, "reason": "question wording", "source": "rules"}
 
         loan_signal = bool(re.search(
-            r"\b(loan|lent|lend|borrow|borrowed|owe|owes|repaid|repay|paid\s+(?:me\s+)?back|got\s+back|gave\s+.*\s+to|received\s+back)\b",
+            r"\b(loan|lent|lend|borrow|borrowed|owe|owes|repaid|repay|return(?:ed)?|paid\s+(?:me\s+)?back|got\s+back|gave\s+.*\s+to|received\s+back)\b",
             normalized,
         ))
         income_signal = bool(re.search(
@@ -1462,12 +1614,29 @@ class NLPService:
             normalized,
         ))
 
-        # "Alex gave/sent me 500" does not say whether this was a gift,
-        # income, a borrowed loan, or a repayment. Never guess and write it.
+        # Explicit wording always wins over conversational context.
+        if loan_signal:
+            return {"intent": "loan", "confidence": 0.98, "reason": "loan transaction wording", "source": "rules"}
+        if income_signal:
+            return {"intent": "income", "confidence": 0.98, "reason": "income source wording", "source": "rules"}
+        if expense_signal or (has_amount and entry_command):
+            return {"intent": "expense", "confidence": 0.97, "reason": "expense entry wording", "source": "rules"}
+
+        # "Alex gave/sent me 500" is ambiguous in isolation. When the user is
+        # already working in Income or Loan, keep that conversational context;
+        # the downstream parser can still ask about loan direction before save.
         ambiguous_received_transfer = bool(re.search(
             r"\b[a-z][a-z.'-]*\s+(?:gave|sent|transferred|paid)\s+me\b", normalized,
         ))
         if ambiguous_received_transfer and has_amount:
+            if contextual_mode in {"income", "loan"}:
+                return {
+                    "intent": contextual_mode,
+                    "confidence": 0.92,
+                    "reason": f"continues the selected {contextual_mode} context",
+                    "source": "context",
+                    "context_applied": True,
+                }
             return {
                 "intent": "income",
                 "confidence": 0.45,
@@ -1476,13 +1645,6 @@ class NLPService:
                 "needs_confirmation": True,
                 "candidates": ["income", "loan"],
             }
-
-        if loan_signal:
-            return {"intent": "loan", "confidence": 0.98, "reason": "loan transaction wording", "source": "rules"}
-        if income_signal:
-            return {"intent": "income", "confidence": 0.98, "reason": "income source wording", "source": "rules"}
-        if expense_signal or (has_amount and entry_command):
-            return {"intent": "expense", "confidence": 0.97, "reason": "expense entry wording", "source": "rules"}
 
         if has_amount:
             transfer_shape = bool(re.search(r"\b(?:to|from)\s+[a-z][a-z.'-]*\b", normalized))
@@ -1498,7 +1660,7 @@ class NLPService:
 
     async def classify_intent(self, text: str, current_mode: str = "chat") -> dict:
         """Choose a UI input mode only; this method never persists a transaction."""
-        rule_result = self._rule_based_intent(text)
+        rule_result = self._rule_based_intent(text, current_mode)
         if rule_result.get("needs_confirmation") or rule_result["confidence"] >= 0.85 or not self.nim_available:
             return rule_result
 
@@ -1626,8 +1788,14 @@ Rules:
             elif transaction_type == "loan":
                 category = "Loan"
             else:
-                category = proposed_category or (
-                    local_category if local_category.lower() != "other" else self._custom_category_from_item(item)
+                # Visible item evidence is more trustworthy than a conflicting
+                # model label (for example, "tea" must not become Education).
+                # Keep the model category only when local item evidence has no
+                # recognized category.
+                category = (
+                    local_category
+                    if local_category.lower() != "other"
+                    else proposed_category or self._custom_category_from_item(item)
                 )
                 amount = abs(amount)
 
@@ -1735,7 +1903,7 @@ Schema:
 
 Rules:
 - Preserve whether the user is asking a question or recording a transaction.
-- Allowed categories: Food, Groceries, Transport, Utilities, Rent, Shopping, Medical, Entertainment, Education, Travel, Accommodation, Electronics, Personal Care, Fitness, Gifts, Finance, Maintenance, Income, Loan, Other.
+- Allowed categories: Food, Groceries, Kitchenware, Transport, Utilities, Rent, Shopping, Medical, Entertainment, Education, Travel, Accommodation, Electronics, Personal Care, Fitness, Gifts, Finance, Maintenance, Income, Loan, Other.
 - Extract a transaction only when both its item/purpose and amount are clearly visible.
 - Never use filler such as "expense entry", "transaction", "money", or "rupees" as the item.
 - Remarks must state only useful visible context such as merchant and item; do not repeat category labels or invent context.
@@ -1988,9 +2156,58 @@ Rules:
             return "Other"
         return " ".join(words).title()
 
+    def _monetary_number_matches(self, text: str) -> list:
+        """Return numeric tokens that represent money, excluding item quantities."""
+        source = str(text or "")
+        unit_pattern = "|".join(
+            sorted((re.escape(unit) for unit in self.QUANTITY_UNITS), key=len, reverse=True)
+        )
+        matches = []
+        for match in re.finditer(r"(?<![\d.])\d+(?:\.\d+)?(?![\d.])", source):
+            suffix = source[match.end():]
+            if re.match(rf"\s*(?:{unit_pattern})\b", suffix, re.IGNORECASE):
+                continue
+            matches.append(match)
+        return matches
+
+    def _single_contextual_entry(self, text: str, mode: str) -> Optional[dict]:
+        """Build one safe record when one price is mixed with quantity context."""
+        matches = self._monetary_number_matches(text)
+        if len(matches) != 1:
+            return None
+
+        amount_match = matches[0]
+        amount = float(amount_match.group(0))
+        item_text = f"{text[:amount_match.start()]} {text[amount_match.end():]}"
+        item_text = re.sub(r"\b(?:rs\.?|npr|rupees?|रु\.?)\b", " ", item_text, flags=re.IGNORECASE)
+        item_text = re.sub(r"\b(?:costs?|price|total|amount)\b", " ", item_text, flags=re.IGNORECASE)
+        item = self.parser._clean_item_name(item_text)
+        if not self._is_meaningful_transaction_item(item):
+            return None
+
+        category = self.parser._categorize(item)
+        if mode == "income":
+            amount = -abs(amount)
+            category = "Income"
+        elif mode == "loan":
+            category = "Loan"
+        else:
+            amount = abs(amount)
+
+        return {
+            "amount": int(amount) if amount.is_integer() else amount,
+            "item": item.title(),
+            "category": category,
+            "remarks": self.parser._generate_detailed_remark(item, category),
+            "paid_by": None,
+            "needs_confirmation": category == "Other" if mode == "expense" else mode == "loan",
+            "transaction_type": mode,
+            "ai_classified": False,
+        }
+
     def _split_item_amount_entries(self, text: str) -> list:
         """Split compact `item amount item amount` input without guessing prose."""
-        matches = list(re.finditer(r"(?<![\d.])\d+(?:\.\d+)?(?![\d.])", str(text or "")))
+        matches = self._monetary_number_matches(text)
         if len(matches) < 2:
             return []
 
@@ -2058,7 +2275,7 @@ Rules:
         # Amounts are factual user input, not a model decision. Enforce them
         # positionally whenever the input and extracted record counts agree.
         explicit_amounts = []
-        for match in re.finditer(r"(?<![\d.])\d+(?:\.\d+)?(?![\d.])", str(text or "")):
+        for match in self._monetary_number_matches(text):
             value = float(match.group(0))
             explicit_amounts.append(int(value) if value.is_integer() else value)
         if len(explicit_amounts) == len(expenses):
@@ -2085,6 +2302,20 @@ Rules:
                 expense["remarks"] = self.parser._generate_detailed_remark(
                     expense.get("item") or "maintenance",
                     "Maintenance",
+                )
+
+            # Clear local meanings should win over small-model guesses such as
+            # Food, Other, Shopping, or a vague custom category.
+            clear_local_category = self.parser._categorize(context)
+            if clear_local_category in {
+                "Electronics", "Kitchenware", "Furniture", "Personal Care",
+                "Household Cleaning", "Pet Supplies", "Software Services",
+            }:
+                expense["category"] = clear_local_category
+                expense["needs_confirmation"] = False
+                expense["remarks"] = self.parser._generate_detailed_remark(
+                    expense.get("item") or context,
+                    clear_local_category,
                 )
 
         transport_keywords = set(self.parser.categories.get("transport", [])) | {"fuel"}
@@ -2138,12 +2369,14 @@ Rules:
 Convert one user entry into structured records for a personal finance app.
 The user has selected the "{mode}" entry tab. Treat that selection as authoritative.
 Entry text: {json.dumps(text)}
-Expected record count from explicit item/amount pairs: {len(self._split_item_amount_entries(text)) or "infer from the entry"}
+Expected record count: {len(self._split_item_amount_entries(text)) or (1 if self._monetary_number_matches(text) else "infer from the entry")}
 
 Return JSON only: {{"expenses": [{{"amount": 400, "item": "item name", "category": "Specific Category", "remarks": "Specific note about this exact transaction", "paid_by": null, "needs_confirmation": false, "transaction_type": "expense"}}]}}
 
 Rules:
 - Extract multiple transactions when the user clearly enters more than one.
+- Understand the difference between context numbers and a price. A number joined to or followed by kg, g, ltr, litre, ml, pieces, packs, bottles, plates, people, guests, days, or another quantity describes the transaction and is never a separate transaction amount.
+- Training examples: "2ltr petrol 400" means ONE expense: amount 400, item "Petrol", remarks "2 litres petrol". "rice 2kg 300" means ONE expense of 300. "2 plates momo 350" means ONE expense of 350. "5kg rice for 10 people 5000" means ONE rice expense of 5000 with quantity/headcount in remarks. "rice 300 and petrol 500" means TWO expenses.
 - Categorize from the meaning of the complete phrase, not one isolated keyword. Purpose/action words such as maintenance, repair, rent, medical treatment, or travel context take precedence over an object name. Example: "fish pond maintenance 7000" is Maintenance, not Food.
 - Understand brands, products, informal words, common Nepali/Indian usage, and small typos. Correct obvious misspellings before categorizing, e.g. "petril 500" means petrol/fuel, "cofee 80" means coffee, and "cury 400" means curry.
 - Infer category from the complete real-world meaning. Use an existing category only when it genuinely fits; otherwise create a short reusable category of 1-3 words. Do not force an item into a vaguely related category and do not use Other for a recognizable item.
@@ -2158,7 +2391,7 @@ Rules:
 - If there is no meaningful financial entry with an amount, return {{"expenses": []}}.
 """
             compact_entries = self._split_item_amount_entries(text)
-            expected_entries = len(compact_entries) if compact_entries else 1
+            expected_entries = len(compact_entries) or (1 if self._monetary_number_matches(text) else 1)
             output_budget = min(600, max(200, 100 + expected_entries * 110))
             response = self.get_nim_response(
                 prompt,
@@ -2189,9 +2422,14 @@ Rules:
                         continue
                 if parsed_data is not None:
                     expenses = self._normalise_nim_transactions(parsed_data.get("expenses", []), mode)
-                    if compact_entries and len(expenses) != len(compact_entries):
-                        print(f"[AI_PARSE] Expected {len(compact_entries)} entries but NIM returned {len(expenses)}")
-                        expenses = self._entries_from_number_delimited_text(text, mode)
+                    expected_count = len(compact_entries) or (1 if self._monetary_number_matches(text) else 0)
+                    if expected_count and len(expenses) != expected_count:
+                        print(f"[AI_PARSE] Expected {expected_count} entries but NIM returned {len(expenses)}")
+                        if compact_entries:
+                            expenses = self._entries_from_number_delimited_text(text, mode)
+                        else:
+                            contextual = self._single_contextual_entry(text, mode)
+                            expenses = [contextual] if contextual else []
                     if mode == "expense":
                         expenses = self._guard_ai_expense_categories(expenses, text)
                     if mode == "loan":
@@ -2232,7 +2470,9 @@ Rules:
         # 1.5k, 10 lakh, 1.25 cr
         # Added strict word boundary or whitespace check to avoid matching inside words if needed, 
         # but the unit list is specific enough with the order fix.
-        pattern = r'(\d+(?:\.\d+)?)\s*(k|lakh|lac|l|crore|cr)\b'
+        # A bare "l" is intentionally not a lakh suffix: in expense entries it
+        # commonly means litre ("2 l petrol 400"). Use lakh/lac explicitly.
+        pattern = r'(\d+(?:\.\d+)?)\s*(k|lakh|lac|crore|cr)\b'
         
         try:
             processed_text = re.sub(pattern, replace_match, text, flags=re.IGNORECASE)
@@ -2283,6 +2523,31 @@ Rules:
                     return ai_result
                 print("[PARSE] NIM entry parsing unavailable; using local fallback")
 
+            # Prefer the quantity-aware extractor before the legacy parser when
+            # the input contains both measurements and a price. The legacy
+            # parser intentionally accepts the first number in loose prose and
+            # would otherwise save "2 l petrol 400" as Rs.2.
+            numeric_count = len(list(re.finditer(r"(?<![\d.])\d+(?:\.\d+)?(?![\d.])", text)))
+            monetary_count = len(self._monetary_number_matches(text))
+            if numeric_count > monetary_count > 1:
+                measured_entries = self._entries_from_number_delimited_text(text, mode)
+                if len(measured_entries) == monetary_count:
+                    expenses = self._apply_mode_to_fallback(measured_entries, mode, text)
+                    return {
+                        "expenses": expenses,
+                        "reply": self._format_entry_reply(expenses, mode),
+                        "parsed_by": "rules",
+                    }
+            if numeric_count > monetary_count == 1:
+                contextual = self._single_contextual_entry(text, mode)
+                if contextual:
+                    expenses = self._apply_mode_to_fallback([contextual], mode, text)
+                    return {
+                        "expenses": expenses,
+                        "reply": self._format_entry_reply(expenses, mode),
+                        "parsed_by": "rules",
+                    }
+
             expenses, reply = self.parser.parse(text)
             if expenses:
                 expenses = [
@@ -2297,6 +2562,16 @@ Rules:
                     "parsed_by": "rules",
                 }
             
+            # Quantity-aware fallback, e.g. "2ltr petrol 400".
+            contextual = self._single_contextual_entry(text, mode)
+            if contextual:
+                expenses = self._apply_mode_to_fallback([contextual], mode, text)
+                return {
+                    "expenses": expenses,
+                    "reply": self._format_entry_reply(expenses, mode),
+                    "parsed_by": "rules",
+                }
+
             # Final fallback: simple extraction
             print("[PARSE] Trying simple extraction...")
             simple_expense = self._simple_extract(text)

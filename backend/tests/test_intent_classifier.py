@@ -26,6 +26,38 @@ class IntentClassifierTest(unittest.TestCase):
         self.assertTrue(result['needs_confirmation'])
         self.assertEqual(['income', 'loan'], result['candidates'])
 
+    def test_ambiguous_transfer_continues_selected_loan_context(self):
+        result = asyncio.run(
+            self.service.classify_intent('Hari gave me 6000', current_mode='loan')
+        )
+
+        self.assertEqual('loan', result['intent'])
+        self.assertFalse(result.get('needs_confirmation', False))
+        self.assertTrue(result['context_applied'])
+
+    def test_ambiguous_transfer_continues_selected_income_context(self):
+        result = asyncio.run(
+            self.service.classify_intent('Hari gave me 6000', current_mode='income')
+        )
+
+        self.assertEqual('income', result['intent'])
+        self.assertFalse(result.get('needs_confirmation', False))
+
+    def test_explicit_repayment_overrides_income_context(self):
+        result = asyncio.run(
+            self.service.classify_intent('Hari paid me back 6000', current_mode='income')
+        )
+
+        self.assertEqual('loan', result['intent'])
+
+    def test_person_returned_amount_is_a_loan_repayment(self):
+        result = asyncio.run(
+            self.service.classify_intent('Salman returned 5000', current_mode='expense')
+        )
+
+        self.assertEqual('loan', result['intent'])
+        self.assertFalse(result.get('needs_confirmation', False))
+
     def test_spend_wording_is_an_expense(self):
         self.assertEqual('expense', self.classify('spend on petrol 600'))
 

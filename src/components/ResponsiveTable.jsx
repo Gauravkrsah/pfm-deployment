@@ -1,5 +1,6 @@
 import { useState, useEffect, useImperativeHandle, forwardRef } from 'react'
 import { supabase } from '../supabase'
+import { rememberCategoryChoice } from '../utils/categoryMemory'
 
 const ResponsiveTable = forwardRef(({ expenses, onExpenseUpdate, currentGroup, user }, ref) => {
   const [data, setData] = useState([])
@@ -133,6 +134,7 @@ const ResponsiveTable = forwardRef(({ expenses, onExpenseUpdate, currentGroup, u
     try {
       const { error } = await supabase.from('expenses').update(editForm).eq('id', editingId)
       if (error) throw error
+      rememberCategoryChoice(user?.id, editForm.item, editForm.category)
       setEditingId(null)
       fetchExpenses()
     } catch (error) {
