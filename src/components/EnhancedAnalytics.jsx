@@ -205,6 +205,13 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
     }
   }, [optimizerResult, stats.expense])
 
+  const optimizerSpendData = optimizerPlan
+    ? [
+      { stage: 'Now', amount: stats.expense, fill: '#94a3b8' },
+      { stage: 'After plan', amount: optimizerPlan.afterPlan, fill: '#10b981' },
+    ]
+    : []
+
   const toggleBudgetCategory = (category) => {
     const defaultSelection = optimizerResult?.selectedCategories || []
     setSelectedBudgetCategories(currentSelection => {
@@ -603,6 +610,32 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                 <div className="flex items-start gap-2 rounded-lg bg-gray-50 px-3 py-2.5 text-xs leading-relaxed text-gray-500 dark:bg-paper-200/50 dark:text-gray-400">
                   <Info size={14} className="mt-0.5 flex-shrink-0 text-gray-400" />
                   <span>This is a suggested spending cap, not an automatic change to your transactions.</span>
+                </div>
+
+                <div className={`${ANALYTICS_PANEL_CLASS} p-4`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h4 className="text-sm font-bold text-gray-900 dark:text-gray-100">Before vs after plan</h4>
+                      <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">See the total spending change if you follow the selected cuts.</p>
+                    </div>
+                    <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">What-if</span>
+                  </div>
+                  <div className="mt-3 h-[150px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart layout="vertical" data={optimizerSpendData} margin={{ top: 4, right: 58, left: 0, bottom: 0 }}>
+                        <XAxis type="number" hide domain={[0, 'dataMax']} />
+                        <YAxis type="category" dataKey="stage" width={72} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+                        <Bar dataKey="amount" name="Spending" radius={[0, 5, 5, 0]} barSize={22}>
+                          {optimizerSpendData.map(entry => <Cell key={entry.stage} fill={entry.fill} />)}
+                          <LabelList dataKey="amount" position="right" fill="#6b7280" fontSize={11} formatter={value => formatRs(value)} />
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between border-t border-gray-100 pt-2 text-xs text-gray-500 dark:border-paper-300 dark:text-gray-400">
+                    <span>Planned reduction</span>
+                    <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatRs(optimizerPlan.achieved)}</span>
+                  </div>
                 </div>
 
               </>
