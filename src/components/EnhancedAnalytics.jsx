@@ -321,7 +321,7 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
   const CustomTooltip = ({ active, payload, label, explanation }) => {
     if (active && payload && payload.length) {
       return (
-        <div className="bg-white dark:bg-paper-300 border border-gray-200 dark:border-paper-400 p-3 rounded-lg shadow-lg">
+        <div className="relative z-[100] bg-white dark:bg-paper-300 border border-gray-200 dark:border-paper-400 p-3 rounded-lg shadow-lg">
           <p className="font-bold text-gray-800 dark:text-gray-100 mb-1">{label}</p>
           {payload.map((entry, index) => (
             <p key={index} style={{ color: entry.color }} className="text-sm">
@@ -897,14 +897,14 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                        />
                      ))}
                    </Pie>
-                   <RechartsTooltip content={<CustomTooltip explanation="Each slice is one category's share of your total spending. Larger slices are where more money goes." />} />
+                   <RechartsTooltip wrapperStyle={{ zIndex: 1000 }} content={<CustomTooltip explanation="Each slice is one category's share of your total spending. Larger slices are where more money goes." />} />
                  </PieChart>
                </ResponsiveContainer>
              ) : (
                <div className="h-full flex items-center justify-center text-gray-400 text-sm">No expenses found.</div>
              )}
              {pieData.length > 0 && (
-               <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-center">
+               <div className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center text-center">
                  <div>
                    <div className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Total spent</div>
                    <div className="mt-1 text-xl font-extrabold text-gray-900 dark:text-gray-100">{formatRs(stats.expense)}</div>
