@@ -54,6 +54,42 @@ export function calculateMovingAverage(data, windowSize = 7) {
  * a starting point. Once the user changes a checkbox, the supplied selection
  * is respected exactly (including an empty selection).
  */
+const CATEGORY_ALIASES = {
+  fooding: 'food',
+  foods: 'food',
+  meal: 'food',
+  meals: 'food',
+  gift: 'gift',
+  gifts: 'gift',
+  transportation: 'transport',
+  transports: 'transport',
+  travels: 'travel',
+  electronic: 'electronics',
+  entertainments: 'entertainment',
+}
+
+export function normalizeExpenseCategory(value) {
+  const normalized = String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[-_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+
+  return CATEGORY_ALIASES[normalized] || normalized || 'other'
+}
+
+export function aggregateExpenseCategories(rows = []) {
+  return (rows || []).reduce((totals, row) => {
+    const amount = Number(row?.amount) || 0
+    if (amount <= 0) return totals
+
+    const category = normalizeExpenseCategory(row?.category)
+    if (category === 'income' || category === 'loan') return totals
+    totals[category] = (totals[category] || 0) + amount
+    return totals
+  }, {})
+}
+
 const BUDGET_CATEGORY_RULES = {
   food: { maxCutRate: 0.15, flexibility: 'flexible', defaultSelected: true, guidance: 'Plan meals and reduce takeout or delivery.' },
   shopping: { maxCutRate: 0.20, flexibility: 'flexible', defaultSelected: true, guidance: 'Pause non-essential purchases and use a 24-hour wait.' },
@@ -89,7 +125,7 @@ const DEFAULT_BUDGET_RULE = {
 }
 
 const getBudgetCategoryRule = (category) => (
-  BUDGET_CATEGORY_RULES[String(category || '').trim().toLowerCase()] || DEFAULT_BUDGET_RULE
+  BUDGET_CATEGORY_RULES[normalizeExpenseCategory(category)] || DEFAULT_BUDGET_RULE
 )
 
 export function optimizeBudget(categories = {}, currentTotal = 0, targetReductionRatio = 0.2, selectedCategories = null) {
@@ -97,13 +133,18 @@ export function optimizeBudget(categories = {}, currentTotal = 0, targetReductio
   const targetSavings = safeTotal * Math.max(0, Number(targetReductionRatio) || 0)
   const selectedSet = selectedCategories === null
     ? null
-    : new Set((selectedCategories || []).map(category => String(category).trim().toLowerCase()))
+    : new Set((selectedCategories || []).map(category => normalizeExpenseCategory(category)))
+  const normalizedCategories = Object.entries(categories || {}).reduce((totals, [name, rawAmount]) => {
+    const category = normalizeExpenseCategory(name)
+    totals[category] = (totals[category] || 0) + (Number(rawAmount) || 0)
+    return totals
+  }, {})
 
-  const plans = Object.entries(categories || {})
+  const plans = Object.entries(normalizedCategories)
     .map(([name, rawAmount]) => {
       const amount = Math.max(0, Number(rawAmount) || 0)
       const rule = getBudgetCategoryRule(name)
-      const normalizedName = String(name).trim().toLowerCase()
+      const normalizedName = normalizeExpenseCategory(name)
       const selected = selectedSet === null ? rule.defaultSelected : selectedSet.has(normalizedName)
       return {
         category: name,

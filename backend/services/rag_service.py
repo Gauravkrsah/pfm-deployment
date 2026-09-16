@@ -307,6 +307,35 @@ class RAGService:
 
         return True
 
+    def _reported_spending_total(self, query: str, expenses_data: List[Dict]) -> Optional[Dict[str, Any]]:
+        """Extract a number the user says their expense view is showing."""
+        query_lower = re.sub(r"\s+", " ", str(query or "").lower()).strip()
+        if not re.search(r"\b(?:expense|expenses|spend|spending|total|amount)\b", query_lower):
+            return None
+        if not re.search(r"\b(?:show(?:ing|s)?|display(?:ing|s|ed)?|is|are|equals?)\b", query_lower):
+            return None
+
+        amount_match = re.search(
+            r"\b(?:show(?:ing|s)?|display(?:ing|s|ed)?|is|are|equals?)\s*"
+            r"(?:(?:rs\.?|npr|रु)\s*)?([\d][\d,]*(?:\.\d+)?)",
+            query_lower,
+        )
+        if not amount_match:
+            return None
+
+        try:
+            reported = float(amount_match.group(1).replace(',', ''))
+        except (TypeError, ValueError):
+            return None
+
+        facts = self._retrieve_finance_facts(expenses_data, query)
+        return {
+            'reported': reported,
+            'actual': float(facts.get('total_expenses') or 0),
+            'count': len(facts.get('expenses') or []),
+            'scope_label': facts.get('scope_label') or 'all recorded time',
+        }
+
     def _existing_expense_categories(self, expenses_data: List[Dict]) -> Dict[str, str]:
         categories = {}
         for transaction in self._expense_rows(expenses_data):
@@ -680,6 +709,26 @@ class RAGService:
                 f"{category_spending['count']} transaction{'s' if category_spending['count'] != 1 else ''}."
             )
 
+        reported_total = self._reported_spending_total(query, expenses_data)
+        if reported_total:
+            reported = reported_total['reported']
+            actual = reported_total['actual']
+            count = reported_total['count']
+            scope_label = reported_total['scope_label']
+            transaction_label = f"across {count} transaction{'s' if count != 1 else ''}"
+            difference = actual - reported
+            if abs(difference) < 0.005:
+                return (
+                    f"{greeting} Your recorded spending is {self._money(actual)} for {scope_label} "
+                    f"{transaction_label}, which matches the amount you mentioned."
+                )
+            direction = 'higher' if difference > 0 else 'lower'
+            return (
+                f"{greeting} Your recorded spending is {self._money(actual)} for {scope_label} "
+                f"{transaction_label}. You mentioned {self._money(reported)}, so the recorded total is "
+                f"{self._money(abs(difference))} {direction}."
+            )
+
         if self._has_unmatched_spending_target(query, expenses_data):
             target = ", ".join(self._spending_target_terms(query))
             return (
@@ -957,6 +1006,7 @@ class RAGService:
         if fallback_response and (
             self._person_spending_facts(query, expenses_data)
             or self._category_spending_facts(query, expenses_data)
+            or self._reported_spending_total(query, expenses_data)
             or self._has_unmatched_spending_target(query, expenses_data)
             or self._is_simple_period_spending_query(query, expenses_data)
         ):

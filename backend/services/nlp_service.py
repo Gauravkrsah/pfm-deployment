@@ -1579,7 +1579,12 @@ class NLPService:
             normalized,
         ))
         question_phrase = bool(re.search(
-            r"\b(how much|how many|do i|did i|have i|what is|what are|show me|tell me|can you|could you)\b",
+            r"\b(how much|how many|do i|did i|have i|what(?:['’]s|s)?|what is|what are|show me|tell me|can you|could you)\b",
+            normalized,
+        ))
+        discrepancy_request = bool(re.search(
+            r"\b(?:my|the)\s+(?:expenses?|spending|total|balance)\s+"
+            r"(?:is|are|shows?|showing|display(?:s|ed)?)\b",
             normalized,
         ))
         analytical_request = bool(re.search(
@@ -1597,6 +1602,7 @@ class NLPService:
             or question_start
             or question_phrase
             or analytical_request
+            or discrepancy_request
             or (period_reference and not has_amount)
         ) and not (entry_command and has_amount):
             return {"intent": "chat", "confidence": 0.99, "reason": "question wording", "source": "rules"}

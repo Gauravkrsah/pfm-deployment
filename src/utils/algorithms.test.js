@@ -1,4 +1,15 @@
-import { optimizeBudget } from './algorithms'
+import { aggregateExpenseCategories, normalizeExpenseCategory, optimizeBudget } from './algorithms'
+
+describe('expense category normalization', () => {
+  test('merges singular and plural category variants', () => {
+    expect(normalizeExpenseCategory('Gifts')).toBe('gift')
+    expect(aggregateExpenseCategories([
+      { amount: 600, category: 'Gift' },
+      { amount: 70, category: 'Gifts' },
+      { amount: 1000, category: 'Income' },
+    ])).toEqual({ gift: 670 })
+  })
+})
 
 describe('optimizeBudget', () => {
   test('does not claim an unrealistic goal is achievable', () => {
@@ -36,5 +47,12 @@ describe('optimizeBudget', () => {
       expect.objectContaining({ category: 'shopping', cutAmount: 1000 }),
       expect.objectContaining({ category: 'entertainment', cutAmount: 1000 }),
     ]))
+  })
+
+  test('merges duplicate category spellings before planning', () => {
+    const result = optimizeBudget({ Gift: 600, Gifts: 70 }, 670, 0.1)
+
+    expect(result.categoryPlans).toHaveLength(1)
+    expect(result.categoryPlans[0]).toEqual(expect.objectContaining({ category: 'gift', amount: 670 }))
   })
 })

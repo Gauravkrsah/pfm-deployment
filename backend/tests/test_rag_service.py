@@ -114,6 +114,18 @@ class RAGServicePeriodTotalsTest(unittest.TestCase):
         self.assertNotIn('Rs.16,314', response)
         self.service.client.chat.completions.create.assert_not_called()
 
+    def test_reported_expense_total_is_compared_without_model_call(self):
+        response = asyncio.run(self.service.query_expenses(
+            'but my expenses is showing 16000',
+            self.expenses,
+            'Gaurav Sah',
+        ))
+
+        self.assertIn('Rs.16,714', response)
+        self.assertIn('Rs.16,000', response)
+        self.assertIn('Rs.714 higher', response)
+        self.service.client.chat.completions.create.assert_not_called()
+
     def test_last_30_days_accepts_compact_wording_and_uses_inclusive_boundary(self):
         rolling_expenses = [
             {'amount': 64, 'category': 'Entertainment', 'date': self.today.isoformat(), 'item': 'Movie'},

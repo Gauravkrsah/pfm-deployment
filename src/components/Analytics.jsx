@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, ResponsiveContainer } from 'recharts'
 import { supabase } from '../supabase'
+import { aggregateExpenseCategories } from '../utils/algorithms'
 
 const COLORS = ['#374151', '#6b7280', '#9ca3af', '#d1d5db']
 
@@ -18,10 +19,7 @@ export default function Analytics() {
 
     if (data) {
       // Category breakdown
-      const categoryTotals = data.reduce((acc, expense) => {
-        acc[expense.category] = (acc[expense.category] || 0) + expense.amount
-        return acc
-      }, {})
+      const categoryTotals = aggregateExpenseCategories(data)
 
       setCategoryData(Object.entries(categoryTotals).map(([name, value]) => ({ name, value })))
 

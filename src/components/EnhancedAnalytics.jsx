@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { supabase } from '../supabase'
 import DateRangePicker, { getDateRange } from './ui/DateRangePicker'
-import { calculateMovingAverage, optimizeBudget } from '../utils/algorithms'
+import { aggregateExpenseCategories, calculateMovingAverage, optimizeBudget } from '../utils/algorithms'
 import { 
   ComposedChart, Line, Area, XAxis, YAxis, CartesianGrid,
   Tooltip as RechartsTooltip, ResponsiveContainer, 
@@ -95,11 +95,7 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
       const loanOutTotal = loanOut.reduce((s, r) => s + r.amount, 0)
       const loanInTotal = loanIn.reduce((s, r) => s + Math.abs(r.amount), 0)
 
-      const categories = {}
-      expenses.forEach(r => {
-        const cat = (r.category || 'other').toLowerCase()
-        categories[cat] = (categories[cat] || 0) + r.amount
-      })
+      const categories = aggregateExpenseCategories(expenses)
 
       const dailyTotals = {};
       expenses.forEach(r => {
@@ -627,7 +623,7 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                         <YAxis type="category" dataKey="stage" width={72} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
                         <Bar dataKey="amount" name="Spending" radius={[0, 5, 5, 0]} barSize={22}>
                           {optimizerSpendData.map(entry => <Cell key={entry.stage} fill={entry.fill} />)}
-                          <LabelList dataKey="amount" position="right" fill="#6b7280" fontSize={11} formatter={value => formatRs(value)} />
+                          <LabelList dataKey="amount" position="insideRight" offset={8} fill="#ffffff" fontSize={11} fontWeight={700} formatter={value => formatRs(value)} />
                         </Bar>
                       </BarChart>
                     </ResponsiveContainer>
@@ -681,13 +677,13 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
             </div>
 
             {optimizerPlan && (
-              <div className="mt-6 border-t border-gray-200 pt-5 dark:border-paper-300">
+              <div className="mt-6 border-t border-paper-200/70 pt-5 dark:border-paper-300/70">
                 <div className="mb-3 flex items-center justify-between gap-2">
                   <div>
-                    <h5 className="text-base font-bold text-gray-800 dark:text-gray-100">Your next moves</h5>
-                    <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Start at the top; these actions prioritize flexible spending.</p>
+                    <h5 className="text-base font-bold text-ink-950 dark:text-paper-900">Your next moves</h5>
+                    <p className="mt-0.5 text-xs text-ink-500 dark:text-paper-600">Start at the top; these actions prioritize flexible spending.</p>
                   </div>
-                  <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-bold text-gray-500 dark:bg-paper-300 dark:text-gray-400">{optimizerPlan.suggestions.length} actions</span>
+                  <span className="rounded-full border border-paper-200/70 bg-paper-50 px-2.5 py-1 text-xs font-bold text-ink-600 dark:border-paper-300 dark:bg-paper-300/50 dark:text-paper-600">{optimizerPlan.suggestions.length} actions</span>
                 </div>
 
                 {optimizerPlan.suggestions.length > 0 ? (
@@ -699,35 +695,34 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                       const cutPercent = current > 0 ? Math.round((cut / current) * 100) : 0
                       const isEssential = suggestion.flexibility === 'essential'
                       return (
-                        <li key={`${suggestion.category}-${index}`} className="rounded-xl border border-gray-100 bg-white p-3.5 dark:border-paper-300 dark:bg-paper-200">
+                        <li key={`${suggestion.category}-${index}`} className="rounded-xl border border-paper-200/70 bg-paper-50/50 p-3.5 dark:border-paper-300 dark:bg-paper-200/40">
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex min-w-0 items-center gap-2">
-                              <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs font-bold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">{index + 1}</span>
-                              <span className="truncate text-sm font-semibold text-gray-800 dark:text-gray-100">{formatCategory(suggestion.category)}</span>
+                              <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-paper-200 bg-paper-100 text-xs font-bold text-paper-700 dark:border-paper-400 dark:bg-paper-300 dark:text-paper-800">{index + 1}</span>
+                              <span className="truncate text-sm font-semibold text-ink-900 dark:text-paper-900">{formatCategory(suggestion.category)}</span>
                             </div>
-                            <span className="flex-shrink-0 text-sm font-bold text-emerald-600 dark:text-emerald-400">Save {formatRs(cut)}</span>
+                            <span className="flex-shrink-0 text-sm font-bold text-money-600 dark:text-money-400">Save {formatRs(cut)}</span>
                           </div>
-                          <div className="mt-2 flex items-center justify-between gap-2 text-xs text-gray-500 dark:text-gray-400">
+                          <div className="mt-2 flex items-center justify-between gap-2 text-xs text-ink-500 dark:text-paper-600">
                             <span>{formatRs(current)} → {formatRs(after)}</span>
                             <span>Save {cutPercent}%</span>
                           </div>
                           <div
-                            className="mt-2 flex h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-paper-400"
+                            className="mt-2 h-1.5 overflow-hidden rounded-full bg-paper-200/70 dark:bg-paper-400/70"
                             role="progressbar"
-                            aria-label={`${formatCategory(suggestion.category)} spending after plan`}
+                            aria-label={`${formatCategory(suggestion.category)} potential saving`}
                             aria-valuemin="0"
                             aria-valuemax="100"
-                            aria-valuenow={Math.max(0, 100 - cutPercent)}
+                            aria-valuenow={Math.min(100, cutPercent)}
                           >
-                            <div className="h-full bg-slate-400 dark:bg-slate-500" style={{ width: `${Math.max(0, 100 - cutPercent)}%` }} />
-                            <div className="h-full bg-emerald-500" style={{ width: `${Math.min(100, cutPercent)}%` }} />
+                            <div className="h-full rounded-full bg-money-500 transition-all duration-500" style={{ width: `${Math.min(100, cutPercent)}%` }} />
                           </div>
-                          <div className="mt-1 flex items-center justify-between text-xs text-gray-400 dark:text-gray-500">
+                          <div className="mt-1 flex items-center justify-between text-xs text-ink-400 dark:text-paper-500">
                             <span>{Math.max(0, 100 - cutPercent)}% remains</span>
-                            <span className="text-emerald-600 dark:text-emerald-400">{cutPercent}% saved</span>
+                            <span className="font-medium text-money-600 dark:text-money-400">{cutPercent}% saved</span>
                           </div>
-                          <div className="mt-2 flex items-start gap-1.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                            {isEssential ? <AlertCircle size={14} className="mt-0.5 flex-shrink-0 text-amber-500" /> : <TrendingDown size={14} className="mt-0.5 flex-shrink-0 text-emerald-500" />}
+                          <div className="mt-2 flex items-start gap-1.5 text-xs leading-relaxed text-ink-500 dark:text-paper-600">
+                            {isEssential ? <AlertCircle size={14} className="mt-0.5 flex-shrink-0 text-amber-500" /> : <TrendingDown size={14} className="mt-0.5 flex-shrink-0 text-ink-400 dark:text-paper-500" />}
                             <span>{suggestion.guidance || (isEssential ? 'Essential - trim carefully' : 'Flexible spending - start here')}</span>
                           </div>
                         </li>
