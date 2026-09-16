@@ -197,6 +197,31 @@ export default function DateRangePicker({ value, onChange, className = '' }) {
         }
     }
 
+    const updateVisibleMonthForDate = (dateKey) => {
+        const date = parseDateKey(dateKey)
+        if (date) setVisibleMonth(new Date(date.getFullYear(), date.getMonth(), 1))
+    }
+
+    const handleManualDateChange = (field, dateKey) => {
+        if (dateKey > todayKey) return
+
+        if (field === 'start') {
+            if (customEnd && dateKey > customEnd) {
+                setCustomStart(customEnd)
+                setCustomEnd(dateKey)
+            } else {
+                setCustomStart(dateKey)
+            }
+        } else if (customStart && dateKey < customStart) {
+            setCustomStart(dateKey)
+            setCustomEnd(customStart)
+        } else {
+            setCustomEnd(dateKey)
+        }
+
+        updateVisibleMonthForDate(dateKey)
+    }
+
     const applyCustomRange = () => {
         if (!customStart || !customEnd || customStart > todayKey || customEnd > todayKey) return
 
@@ -328,14 +353,31 @@ export default function DateRangePicker({ value, onChange, className = '' }) {
                             </div>
 
                             <div className="grid grid-cols-2 gap-2 mb-3">
-                                <div className={`rounded-lg border px-3 py-2 ${customStart && !customEnd ? 'border-black dark:border-white' : 'border-gray-200 dark:border-paper-400'}`}>
-                                    <div className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500">Start date</div>
-                                    <div className="mt-0.5 text-xs font-medium text-gray-900 dark:text-white truncate">{formatSelectedDate(customStart)}</div>
-                                </div>
-                                <div className={`rounded-lg border px-3 py-2 ${customStart && !customEnd ? 'border-black dark:border-white' : 'border-gray-200 dark:border-paper-400'}`}>
-                                    <div className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500">End date</div>
-                                    <div className="mt-0.5 text-xs font-medium text-gray-900 dark:text-white truncate">{formatSelectedDate(customEnd)}</div>
-                                </div>
+                                <label className={`rounded-lg border px-3 py-2 ${customStart && !customEnd ? 'border-black dark:border-white' : 'border-gray-200 dark:border-paper-400'}`}>
+                                    <span className="block text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500">Start date</span>
+                                    <input
+                                        type="date"
+                                        value={customStart}
+                                        max={customEnd || todayKey}
+                                        onChange={(event) => handleManualDateChange('start', event.target.value)}
+                                        onFocus={() => updateVisibleMonthForDate(customStart)}
+                                        aria-label="Start date"
+                                        className="mt-0.5 block w-full min-w-0 bg-transparent text-xs font-medium text-gray-900 outline-none dark:text-white"
+                                    />
+                                </label>
+                                <label className={`rounded-lg border px-3 py-2 ${customStart && !customEnd ? 'border-black dark:border-white' : 'border-gray-200 dark:border-paper-400'}`}>
+                                    <span className="block text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500">End date</span>
+                                    <input
+                                        type="date"
+                                        value={customEnd}
+                                        min={customStart || undefined}
+                                        max={todayKey}
+                                        onChange={(event) => handleManualDateChange('end', event.target.value)}
+                                        onFocus={() => updateVisibleMonthForDate(customEnd || customStart)}
+                                        aria-label="End date"
+                                        className="mt-0.5 block w-full min-w-0 bg-transparent text-xs font-medium text-gray-900 outline-none dark:text-white"
+                                    />
+                                </label>
                             </div>
 
                             <p className="text-xs text-gray-500 dark:text-gray-400 mb-3" aria-live="polite">
