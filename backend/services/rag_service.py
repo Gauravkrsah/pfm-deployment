@@ -4,7 +4,7 @@ from collections import defaultdict
 from datetime import datetime, date
 from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
-from utils.date_periods import resolve_date_period
+from utils.date_periods import MONTHS, resolve_date_period
 from utils.assistant_output import final_answer_only
 from utils.text_normalization import first_name
 
@@ -58,6 +58,7 @@ class RAGService:
     }
     
     def __init__(self):
+        self.chat_timeout = float(os.getenv("NVIDIA_NIM_CHAT_TIMEOUT", "12.0"))
         self._setup_nim()
 
     @staticmethod
@@ -122,7 +123,7 @@ class RAGService:
                 self.client = OpenAI(
                     base_url=os.getenv("NVIDIA_NIM_BASE_URL", DEFAULT_NIM_BASE_URL),
                     api_key=api_key,
-                    timeout=45.0,
+                    timeout=self.chat_timeout,
                     max_retries=0,
                 )
                 self.nim_available = True
@@ -432,11 +433,20 @@ class RAGService:
             'the', 'a', 'an', 'and', 'or', 'my', 'all', 'total', 'expense', 'expenses',
             'spend', 'spent', 'spending', 'money', 'rs', 'rupees', 'month', 'week', 'year',
         }
+        # Month names are date periods, not spending targets. Without this,
+        # "how much did I spend on August" is misread as a search for an item
+        # or category named August.
+        date_words = set(MONTHS) | {
+            'day', 'days', 'date', 'time', 'today', 'yesterday', 'current', 'last', 'past',
+        }
         for match in matches:
             for term in re.split(r"\band\b|,|/|&", match):
                 cleaned = re.sub(r"[^a-zA-Z\s]", " ", term)
                 cleaned = re.sub(r"\b(?:month|week|year|days?|date|time)\b", " ", cleaned)
-                words = [word for word in cleaned.split() if word not in stop_words and len(word) > 2]
+                words = [
+                    word for word in cleaned.split()
+                    if word not in stop_words and word not in date_words and len(word) > 2
+                ]
                 if words:
                     terms.append(" ".join(words))
         return terms
@@ -1109,7 +1119,13 @@ Provide a helpful response:"""
                     "top_k": 1,
                     "chat_template_kwargs": {"enable_thinking": False},
                 }
-            response = self.client.chat.completions.create(**request_options)
+            # Some lightweight callers construct the service without running
+            # __init__; keep those test/fallback clients compatible while the
+            # normal service still enforces the bounded chat timeout.
+            client = self.client
+            if hasattr(self, 'chat_timeout'):
+                client = self.client.with_options(timeout=self.chat_timeout)
+            response = client.chat.completions.create(**request_options)
             if response and response.choices and response.choices[0].message.content:
                 return final_answer_only(response.choices[0].message.content) or fallback_response
             

@@ -5,6 +5,7 @@ from datetime import date, timedelta
 from unittest.mock import MagicMock, patch
 
 from services.rag_service import RAGService
+from utils.date_periods import resolve_date_period
 
 
 class RAGServicePeriodTotalsTest(unittest.TestCase):
@@ -53,6 +54,26 @@ class RAGServicePeriodTotalsTest(unittest.TestCase):
         self.assertIn(self.today.strftime('%B %Y'), response)
         self.service.client.chat.completions.create.assert_not_called()
 
+    def test_month_name_after_on_is_a_period_not_an_item(self):
+        period = resolve_date_period('august', today=self.today)
+        august_expenses = [
+            {'amount': 300, 'category': 'Food', 'date': period.start.replace(day=5).isoformat(), 'item': 'Tea'},
+            {'amount': 900, 'category': 'Transport', 'date': period.start.replace(day=12).isoformat(), 'item': 'Taxi'},
+            {'amount': 400, 'category': 'Food', 'date': (period.start.replace(day=1) - timedelta(days=1)).isoformat(), 'item': 'Dinner'},
+        ]
+
+        response = asyncio.run(self.service.query_expenses(
+            'how much i spend on august',
+            august_expenses,
+            'Gaurav Sah',
+        ))
+
+        self.assertIn('Rs.1,200', response)
+        self.assertIn(period.label, response)
+        self.assertIn('2 transactions', response)
+        self.assertNotIn("couldn't find", response.lower())
+        self.service.client.chat.completions.create.assert_not_called()
+
     def test_category_period_questions_do_not_return_overall_total(self):
         response = asyncio.run(self.service.query_expenses(
             'how much I spend on travel this month',
@@ -91,9 +112,13 @@ class RAGServicePeriodTotalsTest(unittest.TestCase):
         self.service.client.chat.completions.create.assert_not_called()
 
     def test_rent_this_week_uses_rent_not_total_week_spending(self):
+        week_expenses = [
+            *self.expenses,
+            {'amount': 15000, 'category': 'Rent', 'date': self.today.isoformat(), 'item': 'Room rent'},
+        ]
         response = asyncio.run(self.service.query_expenses(
             'how much I spend on rent this week',
-            self.expenses,
+            week_expenses,
             'Gaurav Sah',
         ))
 
