@@ -754,14 +754,14 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
           <div className={`${ANALYTICS_PANEL_CLASS} min-w-0 self-start p-4 sm:p-5`}>
             <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <h5 className="text-sm font-bold text-gray-800 dark:text-gray-100">{optimizerPlan?.isDeficit ? 'Where to cut first' : 'Where to focus first'}</h5>
+                <h5 className="text-sm font-bold text-gray-800 dark:text-gray-100">{optimizerPlan?.isDeficit ? 'Reduce future spending here' : 'Where to focus first'}</h5>
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                   {optimizerPlan?.isDeficit
-                    ? 'Each bar shows how much spending that category could cut to help cover the deficit.'
+                    ? 'These suggestions use this period’s spending to show where upcoming spending could be lower. They do not change recorded expenses.'
                     : 'Each bar shows how much that category could contribute toward your savings goal.'}
                 </p>
               </div>
-              <span className="inline-flex items-center gap-1 text-xs font-semibold text-gray-400 dark:text-gray-500"><TrendingDown size={13} /> Bigger bar = bigger {optimizerPlan?.isDeficit ? 'cut' : 'saving'}</span>
+              <span className="inline-flex items-center gap-1 text-xs font-semibold text-gray-400 dark:text-gray-500"><TrendingDown size={13} /> Bigger bar = bigger {optimizerPlan?.isDeficit ? 'future cut' : 'saving'}</span>
             </div>
             {optimizerSavingsData.length > 0 ? (
               <div className="mt-3" style={{ height: `${optimizerChartHeight}px` }}>
@@ -770,7 +770,7 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                     <CartesianGrid strokeDasharray="3 3" horizontal={false} opacity={0.2} />
                     <XAxis type="number" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={value => `Rs.${Math.round(value / 1000)}k`} />
                     <YAxis type="category" dataKey="category" width={112} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={formatCategory} />
-                    <RechartsTooltip content={<CustomTooltip explanation={optimizerPlan?.isDeficit ? 'Longer bars represent larger spending cuts. These cuts help close the deficit before savings are possible.' : 'Longer bars contribute more toward the savings goal. Green is flexible spending; amber is essential spending.'} />} cursor={{ fill: 'transparent' }} />
+                    <RechartsTooltip content={<CustomTooltip explanation={optimizerPlan?.isDeficit ? 'Longer bars show larger possible reductions in upcoming spending. They cannot undo expenses already recorded.' : 'Longer bars contribute more toward the savings goal. Green is flexible spending; amber is essential spending.'} />} cursor={{ fill: 'transparent' }} />
                     <Bar dataKey="cutAmount" name={optimizerPlan?.isDeficit ? 'Planned cut' : 'Planned saving'} fill="#10b981" radius={[0, 5, 5, 0]} barSize={18}>
                       {optimizerSavingsData.map((entry, index) => (
                         <Cell key={`optimizer-save-${entry.category}-${index}`} fill={entry.flexibility === 'essential' ? '#f59e0b' : '#10b981'} />
@@ -797,7 +797,7 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
             {optimizerPlan && (
               <div className="mt-2 flex items-start gap-2 rounded-lg border border-gray-100 bg-white/70 px-3 py-2 text-xs leading-relaxed text-gray-500 dark:border-paper-300 dark:bg-paper-200/60 dark:text-gray-400">
                 <Info size={14} className="mt-0.5 flex-shrink-0 text-gray-400" />
-                <span>Green bars are flexible categories. Amber bars are essential categories you chose to trim carefully. Hover a bar to see its contribution.</span>
+                <span>{optimizerPlan.isDeficit ? 'Green bars are flexible categories. Amber bars are essential categories you chose to trim carefully. These are future spending reductions only; recorded expenses stay unchanged.' : 'Green bars are flexible categories. Amber bars are essential categories you chose to trim carefully. Hover a bar to see its contribution.'}</span>
               </div>
             )}
 
@@ -805,8 +805,8 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
               <div className="mt-6 border-t border-paper-200/70 pt-5 dark:border-paper-300/70">
                 <div className="mb-3 flex items-center justify-between gap-2">
                   <div>
-                    <h5 className="text-base font-bold text-ink-950 dark:text-paper-900">{optimizerPlan.isDeficit ? 'Your next cuts' : 'Your next moves'}</h5>
-                    <p className="mt-0.5 text-xs text-ink-500 dark:text-paper-600">{optimizerPlan.isDeficit ? 'Start at the top to bring expenses below income.' : 'Start at the top; these actions prioritize flexible spending.'}</p>
+                    <h5 className="text-base font-bold text-ink-950 dark:text-paper-900">{optimizerPlan.isDeficit ? 'Suggested future cuts' : 'Your next moves'}</h5>
+                    <p className="mt-0.5 text-xs text-ink-500 dark:text-paper-600">{optimizerPlan.isDeficit ? 'Use these as limits for upcoming spending; recorded expenses will not change.' : 'Start at the top; these actions prioritize flexible spending.'}</p>
                   </div>
                   <span className="rounded-full border border-paper-200/70 bg-paper-50 px-2.5 py-1 text-xs font-bold text-ink-600 dark:border-paper-300 dark:bg-paper-300/50 dark:text-paper-600">{optimizerPlan.suggestions.length} actions</span>
                 </div>
@@ -826,11 +826,11 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                               <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-paper-200 bg-paper-100 text-xs font-bold text-paper-700 dark:border-paper-400 dark:bg-paper-300 dark:text-paper-800">{index + 1}</span>
                               <span className="truncate text-sm font-semibold text-ink-900 dark:text-paper-900">{formatCategory(suggestion.category)}</span>
                             </div>
-                            <span className="flex-shrink-0 text-sm font-bold text-money-600 dark:text-money-400">{optimizerPlan.isDeficit ? 'Cut' : 'Save'} {formatRs(cut)}</span>
+                            <span className="flex-shrink-0 text-sm font-bold text-money-600 dark:text-money-400">{optimizerPlan.isDeficit ? 'Future cut' : 'Save'} {formatRs(cut)}</span>
                           </div>
                           <div className="mt-2 flex items-center justify-between gap-2 text-xs text-ink-500 dark:text-paper-600">
                             <span>{formatRs(current)} → {formatRs(after)}</span>
-                            <span>{optimizerPlan.isDeficit ? 'Cut' : 'Save'} {cutPercent}%</span>
+                            <span>{optimizerPlan.isDeficit ? 'Future cut' : 'Save'} {cutPercent}%</span>
                           </div>
                           <div
                             className="mt-2 h-1.5 overflow-hidden rounded-full bg-paper-200/70 dark:bg-paper-400/70"
@@ -844,7 +844,7 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                           </div>
                           <div className="mt-1 flex items-center justify-between text-xs text-ink-400 dark:text-paper-500">
                             <span>{Math.max(0, 100 - cutPercent)}% remains</span>
-                            <span className="font-medium text-money-600 dark:text-money-400">{cutPercent}% {optimizerPlan.isDeficit ? 'cut' : 'saved'}</span>
+                            <span className="font-medium text-money-600 dark:text-money-400">{cutPercent}% {optimizerPlan.isDeficit ? 'future cut' : 'saved'}</span>
                           </div>
                           <div className="mt-2 flex items-start gap-1.5 text-xs leading-relaxed text-ink-500 dark:text-paper-600">
                             {isEssential ? <AlertCircle size={14} className="mt-0.5 flex-shrink-0 text-amber-500" /> : <TrendingDown size={14} className="mt-0.5 flex-shrink-0 text-ink-400 dark:text-paper-500" />}
