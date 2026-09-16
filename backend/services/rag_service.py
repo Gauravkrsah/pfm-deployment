@@ -26,6 +26,7 @@ class RAGService:
 
     CATEGORY_ALIASES = {
         "food": ["Food"],
+        "fooding": ["Food"],
         "meal": ["Food"],
         "meals": ["Food"],
         "restaurant": ["Food"],

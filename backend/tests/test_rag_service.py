@@ -65,6 +65,18 @@ class RAGServicePeriodTotalsTest(unittest.TestCase):
         self.assertNotIn('Rs.16,314', response)
         self.service.client.chat.completions.create.assert_not_called()
 
+    def test_fooding_alias_uses_food_category(self):
+        response = asyncio.run(self.service.query_expenses(
+            'how much i spend on fooding',
+            self.expenses,
+            'Gaurav Sah',
+        ))
+
+        self.assertIn('Rs.700', response)
+        self.assertIn('Food', response)
+        self.assertIn('2 transactions', response)
+        self.service.client.chat.completions.create.assert_not_called()
+
     def test_multiple_category_period_question_combines_only_requested_categories(self):
         response = asyncio.run(self.service.query_expenses(
             'how much did I spend on food and travel this month',
