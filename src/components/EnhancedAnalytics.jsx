@@ -153,11 +153,15 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
   }, [user?.id, currentGroup?.id])
 
   const savingsRate = stats.income > 0 ? Math.round((stats.balance / stats.income) * 100) : 0
+  const savingsGoalAmount = stats.income > 0 ? stats.income * (savingsGoal / 100) : 0
+  const currentSavings = stats.income - stats.expense
+  const additionalSavingsNeeded = Math.max(0, savingsGoalAmount - currentSavings)
 
   const optimizerResult = useMemo(() => {
-    if (!stats.expense || !Object.keys(stats.categories).length) return null
-    return optimizeBudget(stats.categories, stats.expense, savingsGoal / 100, selectedBudgetCategories)
-  }, [stats.categories, stats.expense, savingsGoal, selectedBudgetCategories])
+    if (!stats.income || !stats.expense || !Object.keys(stats.categories).length) return null
+    const targetReductionRatio = additionalSavingsNeeded / stats.expense
+    return optimizeBudget(stats.categories, stats.expense, targetReductionRatio, selectedBudgetCategories)
+  }, [stats.categories, stats.expense, stats.income, additionalSavingsNeeded, selectedBudgetCategories])
 
   const optimizerData = useMemo(() => {
     if (!optimizerResult) return []
@@ -183,14 +187,23 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
   const optimizerPlan = useMemo(() => {
     if (!optimizerResult) return null
 
-    const target = Number(optimizerResult.targetSavings) || 0
+    const target = Math.round(savingsGoalAmount)
+    const current = Math.round(currentSavings)
     const achieved = Number(optimizerResult.achievedCuts) || 0
-    const remaining = Math.max(0, target - achieved)
-    const progress = target > 0 ? Math.min(100, Math.round((achieved / target) * 100)) : 0
+    const savedAfterPlan = current + achieved
+    const remaining = Math.max(0, target - savedAfterPlan)
+    const progress = target > 0 ? Math.min(100, Math.round((Math.max(0, savedAfterPlan) / target) * 100)) : 0
 
     return {
       target,
       achieved,
+      currentSavings: current,
+      currentSavingsLabel: current >= 0
+        ? `${formatRs(current)} currently saved`
+        : `${formatRs(Math.abs(current))} current deficit`,
+      currentSavingsSentence: current >= 0
+        ? `save ${formatRs(current)}`
+        : `have a ${formatRs(Math.abs(current))} deficit`,
       remaining,
       progress,
       afterPlan: Math.max(0, stats.expense - achieved),
@@ -199,12 +212,12 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
       suggestions: optimizerResult.suggestions || [],
       targetMet: remaining === 0,
     }
-  }, [optimizerResult, stats.expense])
+  }, [currentSavings, optimizerResult, savingsGoalAmount, stats.expense])
 
   const optimizerSpendData = optimizerPlan
     ? [
-      { stage: 'Now', amount: stats.expense, fill: '#94a3b8' },
-      { stage: 'After plan', amount: optimizerPlan.afterPlan, fill: '#10b981' },
+      { stage: 'Current spending', amount: stats.expense, fill: '#94a3b8' },
+      { stage: 'After saving plan', amount: optimizerPlan.afterPlan, fill: '#10b981' },
     ]
     : []
 
@@ -290,16 +303,17 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
     return text;
   }, [stats.expense, stats.income, stats.balance, stats.loanOut, stats.loanIn]);
 
-  const CustomTooltip = ({ active, payload, label }) => {
+  const CustomTooltip = ({ active, payload, label, explanation }) => {
     if (active && payload && payload.length) {
       return (
         <div className="bg-white dark:bg-paper-300 border border-gray-200 dark:border-paper-400 p-3 rounded-lg shadow-lg">
           <p className="font-bold text-gray-800 dark:text-gray-100 mb-1">{label}</p>
           {payload.map((entry, index) => (
             <p key={index} style={{ color: entry.color }} className="text-sm">
-              {entry.name}: Rs.{entry.value.toLocaleString()}
+              {entry.name}: {formatRs(entry.value)}
             </p>
           ))}
+          {explanation && <p className="mt-2 max-w-[220px] border-t border-gray-100 pt-2 text-xs leading-relaxed text-gray-500 dark:border-paper-400 dark:text-gray-300">{explanation}</p>}
         </div>
       );
     }
@@ -417,7 +431,7 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                    <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.2} />
                    <XAxis dataKey="date" tick={{fontSize: 10}} tickLine={false} axisLine={false} minTickGap={30} />
                    <YAxis tick={{fontSize: 10}} tickLine={false} axisLine={false} tickFormatter={v => `Rs.${v}`} />
-                   <RechartsTooltip content={<CustomTooltip />} />
+                   <RechartsTooltip content={<CustomTooltip explanation="The area shows what you spent each day. The dashed line is the 7-day average, which smooths out one-off spikes." />} />
                    <Area type="monotone" dataKey="amount" name="Daily Spend" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorAmount)" />
                    <Line type="monotone" dataKey="movingAverage" name="7-Day Avg" stroke="#f59e0b" strokeWidth={4} dot={false} strokeDasharray="5 5" />
                  </ComposedChart>
@@ -435,18 +449,22 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
           <div className="flex min-w-0 flex-col gap-4">
             <SectionHeading
               icon={<Target size={18} strokeWidth={2.2} />}
-              title="Budget Optimizer"
-              description="A what-if plan to lower spending from the categories you can change first."
+              title="Savings Planner"
+              description="Choose a savings target based on your income; this shows which spending you could trim to reach it."
               tone="emerald"
               trailing={<span className="hidden flex-shrink-0 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-gray-500 dark:bg-paper-300 dark:text-gray-400 sm:inline-flex">Guide</span>}
             />
 
             <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-100 bg-emerald-50/50 px-3.5 py-3 dark:border-emerald-900/50 dark:bg-emerald-900/10">
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">Target reduction</label>
-                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Choose how much less to spend</p>
+                <label className="block text-xs font-bold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">Savings target</label>
+                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                  {stats.income > 0
+                    ? `Save ${formatRs(savingsGoalAmount)} from ${formatRs(stats.income)} income`
+                    : 'Add income to calculate your target'}
+                </p>
               </div>
-              <div className="relative w-32 flex-shrink-0" ref={goalMenuRef}>
+              <div className="relative w-44 flex-shrink-0" ref={goalMenuRef}>
                 <button
                   type="button"
                   onClick={() => setIsGoalMenuOpen(open => !open)}
@@ -457,7 +475,7 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                   aria-haspopup="listbox"
                   aria-expanded={isGoalMenuOpen}
                 >
-                  <span>Reduce {savingsGoal}%</span>
+                  <span>Save {savingsGoal}% of income</span>
                   <svg className={`h-4 w-4 transition-transform ${isGoalMenuOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
@@ -481,7 +499,7 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                           role="option"
                           aria-selected={savingsGoal === v}
                         >
-                          <span>Reduce {v}%</span>
+                          <span>Save {v}% of income</span>
                           {savingsGoal === v && <CheckCircle2 size={15} />}
                         </button>
                       ))}
@@ -496,8 +514,14 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                 <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-4 dark:border-emerald-900/50 dark:bg-emerald-900/10">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <h5 className="text-sm font-bold text-gray-800 dark:text-gray-100">Which categories can you reduce?</h5>
-                      <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">Select only areas you can realistically change. We started with flexible categories and left essentials off.</p>
+                      <h5 className="text-sm font-bold text-gray-800 dark:text-gray-100">
+                        {optimizerPlan.targetMet ? 'Your savings goal is already reached' : 'Which spending can you reduce?'}
+                      </h5>
+                      <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                        {optimizerPlan.targetMet
+                          ? 'You can still select categories below if you want to save more, but no cut is needed for this goal.'
+                          : 'Choose areas you can realistically change. Flexible categories are selected first; essentials stay off unless you choose them.'}
+                      </p>
                     </div>
                     {selectedBudgetCategories !== null && (
                       <button
@@ -532,7 +556,7 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                             </span>
                             <span className="truncate text-sm font-semibold">{formatCategory(plan.category)}</span>
                           </span>
-                          <span className="flex-shrink-0 text-xs text-gray-400 dark:text-gray-500">up to {Math.round(plan.maxCutRate * 100)}%</span>
+                          <span className="flex-shrink-0 text-xs text-gray-400 dark:text-gray-500">save up to {Math.round(plan.maxCutRate * 100)}%</span>
                         </button>
                       )
                     })}
@@ -557,7 +581,7 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                   )}
                   <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
                     {optimizerPlan.selectedCategories.length > 0
-                      ? `${optimizerPlan.selectedCategories.length} selected · up to ${formatRs(optimizerPlan.availableSavings)} available from these categories`
+                      ? `${optimizerPlan.selectedCategories.length} selected · these categories can save up to ${formatRs(optimizerPlan.availableSavings)}`
                       : 'Select at least one category to build a plan.'}
                   </p>
                 </div>
@@ -565,10 +589,10 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                 <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-4 dark:border-paper-300 dark:bg-paper-200/30">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <div className="text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">Goal progress</div>
+                      <div className="text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">Savings goal progress</div>
                       <div className="mt-1 text-sm text-gray-700 dark:text-gray-200">
-                        <span className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400">{formatRs(optimizerPlan.achieved)}</span>
-                        <span className="text-gray-500 dark:text-gray-400"> of {formatRs(optimizerPlan.target)}</span>
+                        <span className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400">{optimizerPlan.currentSavingsLabel}</span>
+                        <span className="text-gray-500 dark:text-gray-400"> of {formatRs(optimizerPlan.target)} goal</span>
                       </div>
                     </div>
                     <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${optimizerPlan.targetMet
@@ -583,18 +607,18 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                     <div className="h-full rounded-full bg-emerald-500 transition-all duration-500" style={{ width: `${optimizerPlan.progress}%` }} />
                   </div>
                   <div className="mt-1.5 flex justify-between gap-2 text-xs text-gray-500 dark:text-gray-400">
-                    <span>{optimizerPlan.progress}% covered</span>
-                    {optimizerPlan.remaining > 0 ? <span>{formatRs(optimizerPlan.remaining)} still needed</span> : <span>Target reached</span>}
+                    <span>{optimizerPlan.progress}% of goal covered</span>
+                    {optimizerPlan.remaining > 0 ? <span>{formatRs(optimizerPlan.remaining)} more to save</span> : <span>Goal reached</span>}
                   </div>
                 </div>
 
                 <div className="grid grid-cols-3 gap-2">
                   <div className="rounded-lg border border-gray-100 bg-white p-2.5 dark:border-paper-300 dark:bg-paper-200">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-gray-400">Now</div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-gray-400">Current spending</div>
                     <div className="mt-1 text-base font-bold text-gray-800 dark:text-gray-100">{formatRs(stats.expense)}</div>
                   </div>
                   <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-2.5 dark:border-emerald-900/50 dark:bg-emerald-900/10">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">Cut</div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">Extra saving plan</div>
                     <div className="mt-1 text-base font-bold text-emerald-700 dark:text-emerald-300">{formatRs(optimizerPlan.achieved)}</div>
                   </div>
                   <div className="rounded-lg border border-blue-100 bg-blue-50/60 p-2.5 dark:border-blue-900/50 dark:bg-blue-900/10">
@@ -605,14 +629,19 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
 
                 <div className="flex items-start gap-2 rounded-lg bg-gray-50 px-3 py-2.5 text-xs leading-relaxed text-gray-500 dark:bg-paper-200/50 dark:text-gray-400">
                   <Info size={14} className="mt-0.5 flex-shrink-0 text-gray-400" />
-                  <span>This is a suggested spending cap, not an automatic change to your transactions.</span>
+                  <span>
+                    {optimizerPlan.currentSavings >= optimizerPlan.target
+                      ? `You already save ${formatRs(optimizerPlan.currentSavings)} from your income, so the ${formatRs(optimizerPlan.target)} goal is already reached. No spending cut is required.`
+                      : `You ${optimizerPlan.currentSavingsSentence}. This plan adds ${formatRs(optimizerPlan.achieved)}; ${optimizerPlan.remaining > 0 ? `you would still need ${formatRs(optimizerPlan.remaining)} more.` : `that reaches your ${formatRs(optimizerPlan.target)} goal.`}`}
+                    {' '}This is a suggestion only and does not change your transactions.
+                  </span>
                 </div>
 
                 <div className={`${ANALYTICS_PANEL_CLASS} p-4`}>
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <h4 className="text-sm font-bold text-gray-900 dark:text-gray-100">Before vs after plan</h4>
-                      <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">See the total spending change if you follow the selected cuts.</p>
+                      <h4 className="text-sm font-bold text-gray-900 dark:text-gray-100">Current spending vs after plan</h4>
+                      <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">The second bar shows what you would spend after following the suggested cuts.</p>
                     </div>
                     <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">What-if</span>
                   </div>
@@ -620,7 +649,8 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart layout="vertical" data={optimizerSpendData} margin={{ top: 4, right: 58, left: 0, bottom: 0 }}>
                         <XAxis type="number" hide domain={[0, 'dataMax']} />
-                        <YAxis type="category" dataKey="stage" width={72} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+                        <YAxis type="category" dataKey="stage" width={108} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                        <RechartsTooltip content={<CustomTooltip explanation="The difference between the two bars is the amount this plan could help you save." />} />
                         <Bar dataKey="amount" name="Spending" radius={[0, 5, 5, 0]} barSize={22}>
                           {optimizerSpendData.map(entry => <Cell key={entry.stage} fill={entry.fill} />)}
                           <LabelList dataKey="amount" position="insideRight" offset={8} fill="#ffffff" fontSize={11} fontWeight={700} formatter={value => formatRs(value)} />
@@ -629,14 +659,18 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                     </ResponsiveContainer>
                   </div>
                   <div className="mt-2 flex items-center justify-between border-t border-gray-100 pt-2 text-xs text-gray-500 dark:border-paper-300 dark:text-gray-400">
-                    <span>Planned reduction</span>
+                    <span>Planned saving toward goal</span>
                     <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatRs(optimizerPlan.achieved)}</span>
                   </div>
                 </div>
 
               </>
             ) : (
-              <div className="rounded-xl bg-gray-50 p-4 text-sm leading-relaxed text-gray-500 dark:bg-paper-200/50 dark:text-gray-400">Add expenses to get a category-by-category savings plan.</div>
+              <div className="rounded-xl bg-gray-50 p-4 text-sm leading-relaxed text-gray-500 dark:bg-paper-200/50 dark:text-gray-400">
+                {stats.income > 0
+                  ? 'Add expenses to get a category-by-category savings plan.'
+                  : 'Add income first to set a savings target. This planner saves a percentage of your recorded income.'}
+              </div>
             )}
           </div>
 
@@ -644,7 +678,7 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
             <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <h5 className="text-sm font-bold text-gray-800 dark:text-gray-100">Where to focus first</h5>
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Each bar is the amount this plan can save in a category you selected.</p>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Each bar shows how much that category could contribute toward your savings goal.</p>
               </div>
               <span className="inline-flex items-center gap-1 text-xs font-semibold text-gray-400 dark:text-gray-500"><TrendingDown size={13} /> Bigger bar = bigger saving</span>
             </div>
@@ -655,7 +689,7 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                     <CartesianGrid strokeDasharray="3 3" horizontal={false} opacity={0.2} />
                     <XAxis type="number" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={value => `Rs.${Math.round(value / 1000)}k`} />
                     <YAxis type="category" dataKey="category" width={112} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={formatCategory} />
-                    <RechartsTooltip content={<CustomTooltip />} cursor={{ fill: 'transparent' }} />
+                    <RechartsTooltip content={<CustomTooltip explanation="Longer bars contribute more toward the savings goal. Green is flexible spending; amber is essential spending." />} cursor={{ fill: 'transparent' }} />
                     <Bar dataKey="cutAmount" name="Planned saving" fill="#10b981" radius={[0, 5, 5, 0]} barSize={18}>
                       {optimizerSavingsData.map((entry, index) => (
                         <Cell key={`optimizer-save-${entry.category}-${index}`} fill={entry.flexibility === 'essential' ? '#f59e0b' : '#10b981'} />
@@ -668,13 +702,23 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
             ) : (
               <div className="flex h-[300px] flex-col items-center justify-center gap-2 text-center text-sm text-gray-400">
                 <Target size={22} className="text-gray-300 dark:text-gray-600" />
-                <span>Select a category you can reduce to see its savings impact.</span>
+                <span>
+                  {optimizerPlan?.targetMet
+                    ? 'Your savings goal is already reached, so no category cut is required.'
+                    : optimizerPlan
+                      ? 'Select a category you can reduce to see its savings impact.'
+                    : stats.income > 0
+                      ? 'Add expenses to see where your savings goal can come from.'
+                      : 'Add income to set a savings goal.'}
+                </span>
               </div>
             )}
-            <div className="mt-2 flex items-start gap-2 rounded-lg border border-gray-100 bg-white/70 px-3 py-2 text-xs leading-relaxed text-gray-500 dark:border-paper-300 dark:bg-paper-200/60 dark:text-gray-400">
-              <Info size={14} className="mt-0.5 flex-shrink-0 text-gray-400" />
-              <span>Green bars are flexible categories. Amber bars are essential categories you chose to trim carefully.</span>
-            </div>
+            {optimizerPlan && (
+              <div className="mt-2 flex items-start gap-2 rounded-lg border border-gray-100 bg-white/70 px-3 py-2 text-xs leading-relaxed text-gray-500 dark:border-paper-300 dark:bg-paper-200/60 dark:text-gray-400">
+                <Info size={14} className="mt-0.5 flex-shrink-0 text-gray-400" />
+                <span>Green bars are flexible categories. Amber bars are essential categories you chose to trim carefully. Hover a bar to see its contribution.</span>
+              </div>
+            )}
 
             {optimizerPlan && (
               <div className="mt-6 border-t border-paper-200/70 pt-5 dark:border-paper-300/70">
@@ -732,8 +776,8 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                 ) : (
                   <div className="rounded-xl border border-amber-100 bg-amber-50 p-3.5 text-sm leading-relaxed text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/10 dark:text-amber-200">
                     {optimizerPlan.selectedCategories.length === 0
-                      ? 'Select the categories you are willing to change to see a realistic plan.'
-                      : `These choices can save up to ${formatRs(optimizerPlan.availableSavings)}. Try a smaller goal or select another category if you need more.`}
+                      ? 'Select the spending categories you are willing to change to see a realistic plan.'
+                      : `These choices can save up to ${formatRs(optimizerPlan.availableSavings)}. Try a smaller income goal or select another category if you need more.`}
                   </div>
                 )}
               </div>
@@ -772,7 +816,7 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                        />
                      ))}
                    </Pie>
-                   <RechartsTooltip content={<CustomTooltip />} />
+                   <RechartsTooltip content={<CustomTooltip explanation="Each slice is one category's share of your total spending. Larger slices are where more money goes." />} />
                  </PieChart>
                </ResponsiveContainer>
              ) : (
@@ -838,7 +882,7 @@ export default function EnhancedAnalytics({ currentGroup, user }) {
                  <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
                  <XAxis dataKey="name" tick={{fontSize: 13, fontWeight: 500}} tickLine={false} axisLine={false} />
                  <YAxis tick={{fontSize: 11}} tickLine={false} axisLine={false} tickFormatter={v => `Rs.${v/1000}k`} />
-                 <RechartsTooltip content={<CustomTooltip />} cursor={{fill: '#f3f4f6', opacity: 0.4}} />
+                 <RechartsTooltip content={<CustomTooltip explanation="Income is money in, Expenses is money out, and Balance is what remains after expenses." />} cursor={{fill: '#f3f4f6', opacity: 0.4}} />
                  <Bar dataKey="value" radius={[8, 8, 0, 0]} maxBarSize={60}>
                     {summaryData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.fill} className="hover:opacity-80 transition-opacity duration-300 cursor-pointer" />
